@@ -1,0 +1,21 @@
+services:
+  youtube-tracker:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3002:3000"
+    volumes:
+      - yt_data:/app/data
+    environment:
+      - NODE_ENV=production
+      - YT_DLP_PATH=/usr/local/bin/yt-dlp
+      - DATABASE_URL=file:/app/data/dev.db
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  yt_data:

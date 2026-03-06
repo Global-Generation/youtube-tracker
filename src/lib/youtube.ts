@@ -11,6 +11,9 @@ export interface YouTubeResult {
   channelId: string;
   url: string;
   duration: number;
+  viewCount: number | null;
+  publishedAt: string | null;
+  subscriberCount: number | null;
 }
 
 interface YtDlpEntry {
@@ -21,6 +24,9 @@ interface YtDlpEntry {
   url: string;
   duration: number | null;
   webpage_url: string;
+  view_count: number | null;
+  upload_date: string | null;
+  channel_follower_count: number | null;
 }
 
 export async function searchYouTube(
@@ -35,6 +41,15 @@ export async function searchYouTube(
     if (dur <= 60) continue;
     if (!entry.channel) continue;
 
+    // Parse upload_date YYYYMMDD → ISO string
+    let publishedAt: string | null = null;
+    if (entry.upload_date && entry.upload_date.length === 8) {
+      const y = entry.upload_date.slice(0, 4);
+      const m = entry.upload_date.slice(4, 6);
+      const d = entry.upload_date.slice(6, 8);
+      publishedAt = `${y}-${m}-${d}`;
+    }
+
     results.push({
       videoId: entry.id,
       title: entry.title,
@@ -42,6 +57,9 @@ export async function searchYouTube(
       channelId: entry.channel_id || "",
       url: entry.webpage_url || entry.url,
       duration: dur,
+      viewCount: entry.view_count ?? null,
+      publishedAt,
+      subscriberCount: entry.channel_follower_count ?? null,
     });
 
     if (results.length >= 20) break;

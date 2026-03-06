@@ -9,8 +9,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "YT Position Tracker",
-  description: "Track YouTube search positions for your channel",
+  title: "YouTube Tracker",
+  description: "YouTube Tracker by Global Generation",
 };
 
 export default function RootLayout({

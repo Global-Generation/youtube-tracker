@@ -102,6 +102,9 @@ async function runCheckForKeyword(
       url: result.url,
       channel: result.channelTitle,
       isOwn: own,
+      viewCount: result.viewCount,
+      publishedAt: result.publishedAt,
+      subscriberCount: result.subscriberCount,
     };
   });
 

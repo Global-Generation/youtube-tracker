@@ -6,6 +6,7 @@ import Link from "next/link";
 import PositionBadge from "@/components/PositionBadge";
 import PositionChart from "@/components/PositionChart";
 import TopResultsTable from "@/components/TopResultsTable";
+import VideoThumbnail from "@/components/VideoThumbnail";
 import { KeywordDetail } from "@/types";
 
 export default function KeywordDetailPage() {
@@ -69,19 +70,20 @@ export default function KeywordDetailPage() {
       </div>
 
       {/* Own Video Banner */}
-      {data.latestCheck?.ownVideoTitle && (
-        <div className="p-4 bg-success/5 rounded-xl border border-success/20">
-          <p className="text-sm text-success">
-            <span className="font-semibold">Your video:</span>{" "}
+      {data.latestCheck?.ownVideoTitle && data.latestCheck.ownVideoUrl && (
+        <div className="p-4 bg-success/5 rounded-xl border border-success/20 flex items-center gap-4">
+          <VideoThumbnail url={data.latestCheck.ownVideoUrl} title={data.latestCheck.ownVideoTitle} size="md" />
+          <div>
+            <p className="text-xs text-success font-semibold mb-1">Your video</p>
             <a
-              href={data.latestCheck.ownVideoUrl || "#"}
+              href={data.latestCheck.ownVideoUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="underline hover:no-underline"
+              className="text-sm text-success underline hover:no-underline font-medium"
             >
               {data.latestCheck.ownVideoTitle}
             </a>
-          </p>
+          </div>
         </div>
       )}
 
@@ -129,7 +131,14 @@ export default function KeywordDetailPage() {
                     <PositionBadge position={h.ownPosition} />
                   </td>
                   <td className="px-4 py-2.5 text-muted-foreground">
-                    {h.ownVideoTitle || "--"}
+                    {h.ownVideoUrl ? (
+                      <div className="flex items-center gap-2">
+                        <VideoThumbnail url={h.ownVideoUrl} title={h.ownVideoTitle || undefined} />
+                        <span className="truncate max-w-[200px]">{h.ownVideoTitle || "--"}</span>
+                      </div>
+                    ) : (
+                      "--"
+                    )}
                   </td>
                 </tr>
               ))}

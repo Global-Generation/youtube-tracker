@@ -37,14 +37,17 @@ model Check {
 }
 
 model CheckResult {
-  id       Int     @id @default(autoincrement())
-  checkId  Int
-  check    Check   @relation(fields: [checkId], references: [id], onDelete: Cascade)
-  position Int
-  title    String
-  url      String
-  channel  String
-  isOwn    Boolean @default(false)
+  id              Int      @id @default(autoincrement())
+  checkId         Int
+  check           Check    @relation(fields: [checkId], references: [id], onDelete: Cascade)
+  position        Int
+  title           String
+  url             String
+  channel         String
+  isOwn           Boolean  @default(false)
+  viewCount       Int?
+  publishedAt     String?
+  subscriberCount Int?
 
   @@index([checkId])
 }

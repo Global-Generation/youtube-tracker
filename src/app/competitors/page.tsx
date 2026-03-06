@@ -1,12 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import VideoThumbnail, { formatViewCount, formatPublishDate } from "@/components/VideoThumbnail";
 
 interface Appearance {
   keyword: string;
   position: number;
   title: string;
   url: string;
+  viewCount: number | null;
+  publishedAt: string | null;
+  subscriberCount: number | null;
 }
 
 interface Competitor {
@@ -151,14 +155,23 @@ export default function CompetitorsPage() {
                               </span>
                             </td>
                             <td className="py-2.5">
-                              <a
-                                href={app.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-primary hover:underline"
-                              >
-                                {app.title}
-                              </a>
+                              <div className="flex items-center gap-3">
+                                <VideoThumbnail url={app.url} title={app.title} />
+                                <div className="min-w-0">
+                                  <a
+                                    href={app.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-primary hover:underline text-sm line-clamp-1"
+                                  >
+                                    {app.title}
+                                  </a>
+                                  <div className="flex gap-2 text-[11px] text-muted-foreground mt-0.5">
+                                    {app.viewCount != null && <span>{formatViewCount(app.viewCount)} views</span>}
+                                    {app.publishedAt && <span>{formatPublishDate(app.publishedAt)}</span>}
+                                  </div>
+                                </div>
+                              </div>
                             </td>
                           </tr>
                         ))

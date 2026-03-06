@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import PositionBadge from "@/components/PositionBadge";
 import PositionChangeArrow from "@/components/PositionChangeArrow";
+import ClusterHistoryChart from "@/components/ClusterHistoryChart";
 
 interface KeywordStat {
   id: number;
@@ -164,6 +165,9 @@ export default function DashboardPage() {
           </button>
         </div>
       </div>
+
+      {/* Cluster History Chart */}
+      <ClusterHistoryChart />
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

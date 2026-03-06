@@ -45,6 +45,9 @@ export interface CheckResultItem {
   url: string;
   channel: string;
   isOwn: boolean;
+  viewCount: number | null;
+  publishedAt: string | null;
+  subscriberCount: number | null;
 }
 
 export interface Settings {

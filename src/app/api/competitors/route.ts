@@ -24,7 +24,7 @@ export async function GET() {
     string,
     {
       channel: string;
-      appearances: { keyword: string; position: number; title: string; url: string }[];
+      appearances: { keyword: string; position: number; title: string; url: string; viewCount: number | null; publishedAt: string | null; subscriberCount: number | null }[];
     }
   >();
 
@@ -45,6 +45,9 @@ export async function GET() {
         position: result.position,
         title: result.title,
         url: result.url,
+        viewCount: result.viewCount,
+        publishedAt: result.publishedAt,
+        subscriberCount: result.subscriberCount,
       });
     }
   }

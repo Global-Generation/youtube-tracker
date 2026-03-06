@@ -1,0 +1,50 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Setting {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model Keyword {
+  id        Int      @id @default(autoincrement())
+  text      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  checks    Check[]
+}
+
+model Check {
+  id            Int           @id @default(autoincrement())
+  keywordId     Int
+  keyword       Keyword       @relation(fields: [keywordId], references: [id], onDelete: Cascade)
+  checkedAt     DateTime      @default(now())
+  ownPosition   Int?
+  ownVideoUrl   String?
+  ownVideoTitle String?
+  results       CheckResult[]
+
+  @@index([keywordId, checkedAt])
+}
+
+model CheckResult {
+  id       Int     @id @default(autoincrement())
+  checkId  Int
+  check    Check   @relation(fields: [checkId], references: [id], onDelete: Cascade)
+  position Int
+  title    String
+  url      String
+  channel  String
+  isOwn    Boolean @default(false)
+
+  @@index([checkId])
+}

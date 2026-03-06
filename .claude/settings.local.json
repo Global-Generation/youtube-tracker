@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "Bash(git clone:*)",
+      "WebFetch(domain:api.github.com)",
+      "Read(//tmp/**)",
+      "Read(//c/Users/331A~1/AppData/Local/Temp/mytruv-creatoros/**)",
+      "Bash(grep:*)",
+      "Bash(mkdir:*)",
+      "Bash(npx next:*)",
+      "Bash(pkill:*)",
+      "Bash(netstat:*)",
+      "Bash(taskkill:*)",
+      "Bash(curl:*)",
+      "Bash(rm:*)"
+    ]
+  }
+}

@@ -1,6 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
+  ScatterChart,
+  Scatter,
+  ZAxis,
+} from "recharts";
 import VideoThumbnail, { formatViewCount, formatPublishDate } from "@/components/VideoThumbnail";
 
 interface Appearance {
@@ -53,6 +66,24 @@ export default function CompetitorsPage() {
     );
   }
 
+  // Top competitors for charts
+  const top15 = competitors.slice(0, 15);
+
+  // Bubble chart data: x=avgPosition, y=keywordCount, z=totalAppearances
+  const bubbleData = top15.map((c) => ({
+    x: c.avgPosition,
+    y: c.keywordCount,
+    z: c.totalAppearances,
+    name: c.channel.length > 20 ? c.channel.substring(0, 20) + "..." : c.channel,
+    fullName: c.channel,
+  }));
+
+  function getPositionColor(avgPos: number): string {
+    if (avgPos <= 5) return "#22c55e";
+    if (avgPos <= 10) return "#eab308";
+    return "#ef4444";
+  }
+
   return (
     <div>
       <div className="mb-6">
@@ -60,6 +91,121 @@ export default function CompetitorsPage() {
         <p className="text-muted-foreground text-sm mt-1">
           All channels appearing in your tracked keyword results
         </p>
+      </div>
+
+      {/* Competitor Landscape Chart */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
+        {/* Bubble Chart: Position vs Coverage */}
+        <div className="bg-card rounded-xl p-5 border border-border/60">
+          <h2 className="text-sm font-semibold mb-1">Competitive Landscape</h2>
+          <p className="text-[11px] text-muted-foreground mb-4">
+            X = avg position (left = better), Y = keywords covered, bubble = videos
+          </p>
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <ScatterChart margin={{ top: 10, right: 20, bottom: 10, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.5} />
+                <XAxis
+                  type="number"
+                  dataKey="x"
+                  name="Avg Position"
+                  domain={[0, 20]}
+                  reversed
+                  tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+                  tickLine={false}
+                  axisLine={false}
+                  label={{ value: "Avg Position", position: "bottom", fontSize: 10, fill: "var(--color-muted-foreground)" }}
+                />
+                <YAxis
+                  type="number"
+                  dataKey="y"
+                  name="Keywords"
+                  tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={35}
+                  label={{ value: "Keywords", angle: -90, position: "insideLeft", fontSize: 10, fill: "var(--color-muted-foreground)" }}
+                />
+                <ZAxis type="number" dataKey="z" range={[80, 800]} />
+                <Tooltip
+                  cursor={{ strokeDasharray: "3 3" }}
+                  contentStyle={{
+                    background: "var(--color-card)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: "8px",
+                    fontSize: "12px",
+                  }}
+                  labelFormatter={() => ""}
+                  content={({ payload }) => {
+                    if (!payload || payload.length === 0) return null;
+                    const d = payload[0].payload;
+                    return (
+                      <div className="bg-card border border-border rounded-lg p-3 text-xs shadow-lg">
+                        <div className="font-semibold text-sm mb-1">{d.fullName}</div>
+                        <div className="text-muted-foreground">Avg Position: <span className="text-foreground font-medium">{d.x.toFixed(1)}</span></div>
+                        <div className="text-muted-foreground">Keywords: <span className="text-foreground font-medium">{d.y}</span></div>
+                        <div className="text-muted-foreground">Videos: <span className="text-foreground font-medium">{d.z}</span></div>
+                      </div>
+                    );
+                  }}
+                />
+                <Scatter data={bubbleData}>
+                  {bubbleData.map((entry, i) => (
+                    <Cell key={i} fill={getPositionColor(entry.x)} fillOpacity={0.7} stroke={getPositionColor(entry.x)} strokeWidth={1} />
+                  ))}
+                </Scatter>
+              </ScatterChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Bar Chart: Keyword Coverage */}
+        <div className="bg-card rounded-xl p-5 border border-border/60">
+          <h2 className="text-sm font-semibold mb-1">Keyword Coverage</h2>
+          <p className="text-[11px] text-muted-foreground mb-4">
+            How many of your keywords each competitor ranks for
+          </p>
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={top15}
+                layout="vertical"
+                margin={{ top: 0, right: 20, bottom: 0, left: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.3} horizontal={false} />
+                <XAxis
+                  type="number"
+                  tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <YAxis
+                  type="category"
+                  dataKey="channel"
+                  width={140}
+                  tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(v: string) => v.length > 18 ? v.substring(0, 18) + "..." : v}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--color-card)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: "8px",
+                    fontSize: "12px",
+                  }}
+                  formatter={(value) => [Number(value), "Keywords"]}
+                />
+                <Bar dataKey="keywordCount" radius={[0, 4, 4, 0]}>
+                  {top15.map((entry, i) => (
+                    <Cell key={i} fill={getPositionColor(entry.avgPosition)} fillOpacity={0.8} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
       </div>
 
       <div className="space-y-3">

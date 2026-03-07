@@ -294,14 +294,30 @@ export default function DashboardPage() {
 
               {expandedCluster === cluster.id && (
                 <div className="border-t border-border/60 p-4">
-                  <div className="space-y-2">
+                  {/* Column headers */}
+                  <div className="flex items-center gap-3 px-2 pb-2 mb-1 border-b border-border/40 text-[10px] text-muted-foreground uppercase tracking-wider font-medium">
+                    <div className="w-24 shrink-0 hidden sm:block">Превью</div>
+                    <div className="flex-1">Ключевое слово / Статистика видео</div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className="w-12 text-center" title="Позиция вашего видео в топ-20">Позиция</span>
+                      <span className="w-10 text-center" title="Изменение позиции с прошлой проверки">+/-</span>
+                      <span className="w-14 text-center" title="Сколько ваших видео в топ-20 по этому запросу">Наших</span>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
                     {cluster.keywords.map((kw) => (
                       <div
                         key={kw.id}
-                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/30 transition-colors border-b border-border/30 last:border-0"
+                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/30 transition-colors"
                       >
-                        {kw.ownVideoUrl && (
-                          <VideoThumbnail url={kw.ownVideoUrl} title={kw.ownVideoTitle || undefined} />
+                        {kw.ownVideoUrl ? (
+                          <div className="hidden sm:block">
+                            <VideoThumbnail url={kw.ownVideoUrl} title={kw.ownVideoTitle || undefined} />
+                          </div>
+                        ) : (
+                          <div className="w-24 h-[54px] rounded bg-muted/50 hidden sm:flex items-center justify-center text-[10px] text-muted-foreground">
+                            Нет видео
+                          </div>
                         )}
                         <div className="flex-1 min-w-0">
                           <Link
@@ -325,13 +341,21 @@ export default function DashboardPage() {
                           )}
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
-                          <PositionBadge position={kw.currentPosition} />
-                          <PositionChangeArrow change={kw.change} />
-                          {kw.ownVideosInTop20 > 0 && (
-                            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-success/10 text-success">
-                              {kw.ownVideosInTop20} own
-                            </span>
-                          )}
+                          <div className="w-12 flex justify-center">
+                            <PositionBadge position={kw.currentPosition} />
+                          </div>
+                          <div className="w-10 flex justify-center">
+                            <PositionChangeArrow change={kw.change} />
+                          </div>
+                          <div className="w-14 flex justify-center">
+                            {kw.ownVideosInTop20 > 0 ? (
+                              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-success/10 text-success">
+                                {kw.ownVideosInTop20}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">0</span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ))}

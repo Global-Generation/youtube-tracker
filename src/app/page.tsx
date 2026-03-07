@@ -5,6 +5,7 @@ import Link from "next/link";
 import PositionBadge from "@/components/PositionBadge";
 import PositionChangeArrow from "@/components/PositionChangeArrow";
 import ClusterHistoryChart from "@/components/ClusterHistoryChart";
+import VideoThumbnail, { formatViewCount, formatPublishDate } from "@/components/VideoThumbnail";
 
 interface KeywordStat {
   id: number;
@@ -14,6 +15,11 @@ interface KeywordStat {
   change: number | null;
   hasOwnVideo: boolean;
   ownVideoUrl: string | null;
+  ownVideoTitle: string | null;
+  ownVideosInTop20: number;
+  ownVideoViewCount: number | null;
+  ownVideoPublishedAt: string | null;
+  ownVideoSubscriberCount: number | null;
   lastChecked: string | null;
   topCompetitors: { position: number; title: string; channel: string }[];
 }
@@ -288,48 +294,48 @@ export default function DashboardPage() {
 
               {expandedCluster === cluster.id && (
                 <div className="border-t border-border/60 p-4">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-left text-muted-foreground">
-                        <th className="pb-3 font-medium">Keyword</th>
-                        <th className="pb-3 font-medium">Position</th>
-                        <th className="pb-3 font-medium">Change</th>
-                        <th className="pb-3 font-medium hidden md:table-cell">
-                          Top Competitors
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {cluster.keywords.map((kw) => (
-                        <tr
-                          key={kw.id}
-                          className="border-t border-border/40 hover:bg-muted/30 transition-colors"
-                        >
-                          <td className="py-2.5">
-                            <Link
-                              href={`/keywords/${kw.id}`}
-                              className="text-primary hover:underline font-medium"
-                            >
-                              {kw.text}
-                            </Link>
-                          </td>
-                          <td className="py-2.5">
-                            <PositionBadge position={kw.currentPosition} />
-                          </td>
-                          <td className="py-2.5">
-                            <PositionChangeArrow change={kw.change} />
-                          </td>
-                          <td className="py-2.5 text-muted-foreground hidden md:table-cell">
-                            {kw.topCompetitors.length > 0
-                              ? kw.topCompetitors
-                                  .map((c) => `#${c.position} ${c.channel}`)
-                                  .join(", ")
-                              : "--"}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <div className="space-y-2">
+                    {cluster.keywords.map((kw) => (
+                      <div
+                        key={kw.id}
+                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/30 transition-colors border-b border-border/30 last:border-0"
+                      >
+                        {kw.ownVideoUrl && (
+                          <VideoThumbnail url={kw.ownVideoUrl} title={kw.ownVideoTitle || undefined} />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <Link
+                            href={`/keywords/${kw.id}`}
+                            className="text-primary hover:underline font-medium text-sm"
+                          >
+                            {kw.text}
+                          </Link>
+                          {kw.ownVideoUrl && (
+                            <div className="flex items-center gap-3 mt-0.5 text-[11px] text-muted-foreground">
+                              {kw.ownVideoViewCount != null && (
+                                <span>{formatViewCount(kw.ownVideoViewCount)} views</span>
+                              )}
+                              {kw.ownVideoPublishedAt && (
+                                <span>{formatPublishDate(kw.ownVideoPublishedAt)}</span>
+                              )}
+                              {kw.ownVideoSubscriberCount != null && (
+                                <span>{formatViewCount(kw.ownVideoSubscriberCount)} subs</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <PositionBadge position={kw.currentPosition} />
+                          <PositionChangeArrow change={kw.change} />
+                          {kw.ownVideosInTop20 > 0 && (
+                            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-success/10 text-success">
+                              {kw.ownVideosInTop20} own
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

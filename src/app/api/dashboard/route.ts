@@ -12,9 +12,7 @@ export async function GET() {
         take: 2,
         include: {
           results: {
-            where: { isOwn: false },
             orderBy: { position: "asc" },
-            take: 3,
           },
         },
       },
@@ -33,6 +31,18 @@ export async function GET() {
       change = previousPos - currentPos;
     }
 
+    const ownResults = current?.results.filter((r) => r.isOwn) ?? [];
+    const ownVideosInTop20 = ownResults.length;
+    const firstOwnResult = ownResults[0];
+    const topCompetitors = current?.results
+      .filter((r) => !r.isOwn)
+      .slice(0, 3)
+      .map((r) => ({
+        position: r.position,
+        title: r.title,
+        channel: r.channel,
+      })) ?? [];
+
     return {
       id: kw.id,
       text: kw.text,
@@ -41,12 +51,13 @@ export async function GET() {
       change,
       hasOwnVideo: currentPos !== null,
       ownVideoUrl: current?.ownVideoUrl ?? null,
+      ownVideoTitle: current?.ownVideoTitle ?? null,
+      ownVideosInTop20,
+      ownVideoViewCount: firstOwnResult?.viewCount ?? null,
+      ownVideoPublishedAt: firstOwnResult?.publishedAt ?? null,
+      ownVideoSubscriberCount: firstOwnResult?.subscriberCount ?? null,
       lastChecked: current?.checkedAt ?? null,
-      topCompetitors: current?.results.map((r) => ({
-        position: r.position,
-        title: r.title,
-        channel: r.channel,
-      })) ?? [],
+      topCompetitors,
     };
   });
 

@@ -59,6 +59,53 @@ export async function fetchVideoPublishDates(
 }
 
 /**
+ * Filter out YouTube Shorts from a list of video IDs.
+ * Returns only video IDs with duration > 60 seconds.
+ */
+export async function filterOutShorts(videoIds: string[]): Promise<string[]> {
+  const apiKey = await getApiKey();
+  if (!apiKey || videoIds.length === 0) return videoIds;
+
+  const longVideos: string[] = [];
+
+  for (let i = 0; i < videoIds.length; i += 50) {
+    const batch = videoIds.slice(i, i + 50);
+    try {
+      const url = `${YOUTUBE_API_BASE}/videos?part=contentDetails&id=${batch.join(",")}&key=${apiKey}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        console.error(`[YouTube API] videos.list contentDetails error: ${res.status}`);
+        // On error, include all videos rather than dropping them
+        longVideos.push(...batch);
+        continue;
+      }
+      const data = await res.json();
+      for (const item of data.items || []) {
+        const duration = item.contentDetails?.duration as string | undefined;
+        if (duration && parseDurationSeconds(duration) > 60) {
+          longVideos.push(item.id);
+        }
+      }
+    } catch (err) {
+      console.error("[YouTube API] filterOutShorts error:", err);
+      longVideos.push(...batch);
+    }
+  }
+
+  return longVideos;
+}
+
+/** Parse ISO 8601 duration (e.g. "PT1M25S", "PT42S", "PT1H2M3S") to seconds */
+function parseDurationSeconds(iso: string): number {
+  const match = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (!match) return 0;
+  const h = parseInt(match[1] || "0");
+  const m = parseInt(match[2] || "0");
+  const s = parseInt(match[3] || "0");
+  return h * 3600 + m * 60 + s;
+}
+
+/**
  * Fetch subscriber counts for a batch of channel IDs.
  * Returns a map of channelId → subscriberCount.
  */

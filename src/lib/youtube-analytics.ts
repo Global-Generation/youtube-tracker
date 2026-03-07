@@ -278,12 +278,17 @@ async function getSearchTermsForVideo(
 }
 
 // Get ALL search terms across all channel videos (merged & summed)
+// Filters out Shorts (≤60s) to only analyze horizontal content
 export async function getAllSearchTerms(
   startDate: string,
   endDate: string,
 ): Promise<SearchTrafficVideo[]> {
-  const videoIds = await getChannelVideoIds(startDate, endDate);
-  console.log(`[getAllSearchTerms] Found ${videoIds.length} videos, fetching search terms...`);
+  const { filterOutShorts } = await import("./youtube-api");
+  const allVideoIds = await getChannelVideoIds(startDate, endDate);
+  console.log(`[getAllSearchTerms] Found ${allVideoIds.length} total videos, filtering Shorts...`);
+
+  const videoIds = await filterOutShorts(allVideoIds);
+  console.log(`[getAllSearchTerms] ${videoIds.length} videos after filtering Shorts (removed ${allVideoIds.length - videoIds.length})`);
 
   const termMap = new Map<string, number>();
 

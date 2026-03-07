@@ -233,7 +233,7 @@ export default function CompetitorsPage() {
                         <div className="font-semibold text-sm mb-1">{d.fullName}</div>
                         <div className="text-muted-foreground">Avg Position: <span className="text-foreground font-medium">{d.x.toFixed(1)}</span></div>
                         <div className="text-muted-foreground">Keywords: <span className="text-foreground font-medium">{d.y}</span></div>
-                        <div className="text-muted-foreground">Videos: <span className="text-foreground font-medium">{d.z}</span></div>
+                        <div className="text-muted-foreground">Appearances: <span className="text-foreground font-medium">{d.z}</span></div>
                       </div>
                     );
                   }}

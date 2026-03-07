@@ -39,16 +39,25 @@ export default function TopResultsTable({ results }: Props) {
               >
                 {r.title}
               </a>
-              <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                <span>{r.channel}</span>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-xs text-muted-foreground">
+                <span className="font-medium">{r.channel}</span>
+                {r.subscriberCount != null && (
+                  <>
+                    <span className="text-border">|</span>
+                    <span>{formatViewCount(r.subscriberCount)} subs</span>
+                  </>
+                )}
                 {r.viewCount != null && (
-                  <span>{formatViewCount(r.viewCount)} views</span>
+                  <>
+                    <span className="text-border">|</span>
+                    <span>{formatViewCount(r.viewCount)} views</span>
+                  </>
                 )}
                 {r.publishedAt && (
-                  <span>{formatPublishDate(r.publishedAt)}</span>
-                )}
-                {r.subscriberCount != null && (
-                  <span className="hidden md:inline">{formatViewCount(r.subscriberCount)} subs</span>
+                  <>
+                    <span className="text-border">|</span>
+                    <span>{formatPublishDate(r.publishedAt)}</span>
+                  </>
                 )}
               </div>
             </div>

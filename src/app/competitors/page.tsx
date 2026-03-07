@@ -33,6 +33,7 @@ interface Competitor {
   bestPosition: number;
   totalAppearances: number;
   appearances: Appearance[];
+  isOwn?: boolean;
 }
 
 interface OwnChannel {
@@ -85,9 +86,9 @@ export default function CompetitorsPage() {
 
   const { competitors: allCompetitors, ownChannel, marketAvg } = data;
 
-  // Filter competitors by minimum keyword count
+  // Filter competitors by minimum keyword count (always show our own channel)
   const competitors = minKeywords > 0
-    ? allCompetitors.filter((c) => c.keywordCount >= minKeywords)
+    ? allCompetitors.filter((c) => c.isOwn || c.keywordCount >= minKeywords)
     : allCompetitors;
 
   // Top competitors for charts
@@ -300,6 +301,7 @@ export default function CompetitorsPage() {
         {competitors.map((comp) => {
           const isExpanded = expanded === comp.channel;
           const hasTopOne = comp.bestPosition === 1;
+          const isUs = comp.isOwn === true;
           const byKeyword = new Map<string, Appearance[]>();
           for (const a of comp.appearances) {
             if (!byKeyword.has(a.keyword)) byKeyword.set(a.keyword, []);
@@ -310,7 +312,9 @@ export default function CompetitorsPage() {
             <div
               key={comp.channel}
               className={`border rounded-xl overflow-hidden bg-card ${
-                hasTopOne
+                isUs
+                  ? "border-primary/50 bg-primary/5 ring-1 ring-primary/20"
+                  : hasTopOne
                   ? "border-amber-500/40 bg-amber-500/5"
                   : "border-border/60"
               }`}
@@ -321,7 +325,12 @@ export default function CompetitorsPage() {
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <span className="font-semibold text-sm">{comp.channel}</span>
+                    <span className={`font-semibold text-sm ${isUs ? "text-primary" : ""}`}>{comp.channel}</span>
+                    {isUs && (
+                      <span className="text-[10px] px-2 py-0.5 bg-primary text-primary-foreground rounded-full font-semibold">
+                        You
+                      </span>
+                    )}
                     <span className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full font-medium">
                       {comp.keywordCount} keywords
                     </span>

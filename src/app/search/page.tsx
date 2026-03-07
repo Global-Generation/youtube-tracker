@@ -12,6 +12,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { getHeatLevel, HEAT_LABELS } from "@/lib/heat-map";
 
 interface DailyData {
   date: string;
@@ -42,106 +43,6 @@ interface SearchTrafficData {
 
 type Period = "30" | "90" | "180" | "365" | "all";
 type Segment = "day" | "week" | "month";
-
-const HEAT_LABELS: Record<number, { label: string; color: string; bg: string }> = {
-  5: { label: "Hot", color: "text-red-400", bg: "bg-red-500/15 border-red-500/30" },
-  4: { label: "Warm", color: "text-orange-400", bg: "bg-orange-500/15 border-orange-500/30" },
-  3: { label: "Medium", color: "text-yellow-400", bg: "bg-yellow-500/15 border-yellow-500/30" },
-  2: { label: "Cool", color: "text-blue-400", bg: "bg-blue-500/15 border-blue-500/30" },
-  1: { label: "Cold", color: "text-slate-400", bg: "bg-slate-500/15 border-slate-500/30" },
-  0: { label: "Untracked", color: "text-muted-foreground", bg: "bg-muted/50 border-border/40" },
-};
-
-// Keyword → heatLevel matching (fuzzy, lowercase)
-const HEAT_MAP: { pattern: string; heat: number }[] = [
-  // Heat 5 — Admission general
-  { pattern: "поступить в сша", heat: 5 },
-  { pattern: "поступление в сша", heat: 5 },
-  { pattern: "бакалавриат в сша", heat: 5 },
-  { pattern: "поступление за границу", heat: 5 },
-  { pattern: "как поступить в американский университет", heat: 5 },
-  { pattern: "gap year", heat: 5 },
-  { pattern: "community college", heat: 5 },
-  { pattern: "перевод из российского", heat: 5 },
-  // Heat 5 — Masters/PhD/MBA
-  { pattern: "магистратура", heat: 5 },
-  { pattern: "mba", heat: 5 },
-  { pattern: "phd", heat: 5 },
-  // Heat 4 — Scholarships
-  { pattern: "стипенди", heat: 4 },
-  { pattern: "financial aid", heat: 4 },
-  { pattern: "need blind", heat: 4 },
-  { pattern: "грант", heat: 4 },
-  // Heat 4 — Documents
-  { pattern: "эссе", heat: 4 },
-  { pattern: "мотивационное письмо", heat: 4 },
-  { pattern: "рекомендательн", heat: 4 },
-  { pattern: "портфолио", heat: 4 },
-  { pattern: "common app", heat: 4 },
-  { pattern: "интервью", heat: 4 },
-  { pattern: "активности для поступления", heat: 4 },
-  { pattern: "css profile", heat: 4 },
-  { pattern: "why essay", heat: 4 },
-  { pattern: "supplemental", heat: 4 },
-  { pattern: "extracurricular", heat: 4 },
-  { pattern: "волонтерство", heat: 4 },
-  // Heat 4 — Visa
-  { pattern: "виза", heat: 4 },
-  { pattern: "f-1", heat: 4 },
-  { pattern: "opt ", heat: 4 },
-  // Heat 4 — Application process
-  { pattern: "deadline", heat: 4 },
-  { pattern: "early decision", heat: 4 },
-  { pattern: "early action", heat: 4 },
-  { pattern: "waitlist", heat: 4 },
-  // Heat 3 — Exams
-  { pattern: "sat", heat: 3 },
-  { pattern: "gre", heat: 3 },
-  { pattern: "gmat", heat: 3 },
-  { pattern: "toefl", heat: 3 },
-  { pattern: "ielts", heat: 3 },
-  { pattern: "экзамен", heat: 3 },
-  { pattern: "ap экзамен", heat: 3 },
-  // Heat 3 — Universities
-  { pattern: "университет", heat: 3 },
-  { pattern: "универ", heat: 3 },
-  { pattern: "вуз", heat: 3 },
-  { pattern: "гарвард", heat: 3 },
-  { pattern: "стенфорд", heat: 3 },
-  { pattern: "stanford", heat: 3 },
-  { pattern: "harvard", heat: 3 },
-  { pattern: "mit", heat: 3 },
-  { pattern: "ivy league", heat: 3 },
-  { pattern: "лига плюща", heat: 3 },
-  { pattern: "liberal arts", heat: 3 },
-  { pattern: "stem", heat: 3 },
-  // Heat 2 — Student life
-  { pattern: "кампус", heat: 2 },
-  { pattern: "общежити", heat: 2 },
-  { pattern: "стоимость обучения", heat: 2 },
-  { pattern: "подработка", heat: 2 },
-  { pattern: "жизнь в сша", heat: 2 },
-  { pattern: "учеба в сша", heat: 2 },
-  { pattern: "образование в сша", heat: 2 },
-  { pattern: "global generation", heat: 2 },
-  // Broad catch-alls (order matters — checked after specific patterns)
-  { pattern: "поступить", heat: 5 },
-  { pattern: "поступлени", heat: 5 },
-  { pattern: "за границ", heat: 5 },
-  { pattern: "учеб", heat: 2 },
-  { pattern: "америк", heat: 2 },
-  { pattern: "нью йорк", heat: 1 },
-  { pattern: "нью-йорк", heat: 1 },
-  { pattern: "лекци", heat: 1 },
-];
-
-function getHeatLevel(term: string): number {
-  const lower = term.toLowerCase();
-  for (const { pattern, heat } of HEAT_MAP) {
-    if (lower.includes(pattern)) return heat;
-  }
-  return 0;
-}
 
 function DeltaBadge({ current, previous }: { current: number; previous: number }) {
   if (previous === 0) return null;
@@ -232,6 +133,21 @@ function formatSegmentLabel(label: string, segment: Segment): string {
   return formatDate(label);
 }
 
+interface IntentMonthData {
+  period: string;
+  hot: number;
+  warm: number;
+  medium: number;
+  cool: number;
+  cold: number;
+  untracked: number;
+}
+
+interface HistoryMonth {
+  period: string;
+  terms: { term: string; views: number }[];
+}
+
 interface TermWithHeat {
   videoId: string;
   views: number;
@@ -307,6 +223,35 @@ export default function SearchPage() {
   const [segment, setSegment] = useState<Segment>("week");
   const [heatFilter, setHeatFilter] = useState<number | null>(null); // null = all
   const [trackedKeywords, setTrackedKeywords] = useState<string[]>([]);
+  const [intentHistory, setIntentHistory] = useState<IntentMonthData[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+
+  // Fetch intent history (monthly term snapshots)
+  useEffect(() => {
+    setHistoryLoading(true);
+    fetch("/api/youtube-analytics/search-traffic/history")
+      .then((res) => res.json())
+      .then((json: { months: HistoryMonth[] }) => {
+        if (json.months) {
+          const data = json.months.map((m) => {
+            const buckets = { hot: 0, warm: 0, medium: 0, cool: 0, cold: 0, untracked: 0 };
+            for (const t of m.terms) {
+              const heat = getHeatLevel(t.term);
+              if (heat >= 5) buckets.hot += t.views;
+              else if (heat >= 4) buckets.warm += t.views;
+              else if (heat >= 3) buckets.medium += t.views;
+              else if (heat >= 2) buckets.cool += t.views;
+              else if (heat >= 1) buckets.cold += t.views;
+              else buckets.untracked += t.views;
+            }
+            return { period: m.period, ...buckets };
+          });
+          setIntentHistory(data);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setHistoryLoading(false));
+  }, []);
 
   // Fetch tracked keywords for "not tracked" badges
   useEffect(() => {
@@ -596,6 +541,101 @@ export default function SearchPage() {
             )}
           </ResponsiveContainer>
         </div>
+      </div>
+
+      {/* Intent Dynamics Chart */}
+      <div className="bg-card rounded-xl p-5 border border-border/60">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-sm font-semibold">Intent Dynamics</h2>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Monthly search views by intent level</p>
+          </div>
+          {historyLoading && (
+            <span className="text-[11px] text-muted-foreground animate-pulse">Loading history...</span>
+          )}
+        </div>
+        {historyLoading ? (
+          <div className="h-64 bg-muted/30 rounded-lg animate-pulse" />
+        ) : intentHistory.length > 0 ? (
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={intentHistory} stackOffset="none">
+                <defs>
+                  {[
+                    { id: "hotGrad", color: HEAT_LABELS[5].chartColor },
+                    { id: "warmGrad", color: HEAT_LABELS[4].chartColor },
+                    { id: "medGrad", color: HEAT_LABELS[3].chartColor },
+                    { id: "coolGrad", color: HEAT_LABELS[2].chartColor },
+                    { id: "coldGrad", color: HEAT_LABELS[1].chartColor },
+                    { id: "untGrad", color: HEAT_LABELS[0].chartColor },
+                  ].map(({ id, color }) => (
+                    <linearGradient key={id} id={id} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={color} stopOpacity={0.6} />
+                      <stop offset="95%" stopColor={color} stopOpacity={0.1} />
+                    </linearGradient>
+                  ))}
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.5} />
+                <XAxis
+                  dataKey="period"
+                  tickFormatter={(p: string) => {
+                    const d = new Date(p + "-01T00:00:00");
+                    return d.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+                  }}
+                  tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <YAxis
+                  tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={45}
+                  tickFormatter={formatNum}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--color-card)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: "8px",
+                    fontSize: "12px",
+                  }}
+                  labelFormatter={(p) => {
+                    const d = new Date(String(p) + "-01T00:00:00");
+                    return d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+                  }}
+                  formatter={(value, name) => {
+                    const labels: Record<string, string> = {
+                      hot: "Hot", warm: "Warm", medium: "Medium",
+                      cool: "Cool", cold: "Cold", untracked: "Untracked",
+                    };
+                    return [Number(value).toLocaleString(), labels[String(name)] || String(name)];
+                  }}
+                />
+                <Area type="monotone" dataKey="hot" stackId="1" stroke={HEAT_LABELS[5].chartColor} fill="url(#hotGrad)" strokeWidth={1.5} />
+                <Area type="monotone" dataKey="warm" stackId="1" stroke={HEAT_LABELS[4].chartColor} fill="url(#warmGrad)" strokeWidth={1.5} />
+                <Area type="monotone" dataKey="medium" stackId="1" stroke={HEAT_LABELS[3].chartColor} fill="url(#medGrad)" strokeWidth={1.5} />
+                <Area type="monotone" dataKey="cool" stackId="1" stroke={HEAT_LABELS[2].chartColor} fill="url(#coolGrad)" strokeWidth={1.5} />
+                <Area type="monotone" dataKey="cold" stackId="1" stroke={HEAT_LABELS[1].chartColor} fill="url(#coldGrad)" strokeWidth={1.5} />
+                <Area type="monotone" dataKey="untracked" stackId="1" stroke={HEAT_LABELS[0].chartColor} fill="url(#untGrad)" strokeWidth={1.5} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <div className="h-32 flex items-center justify-center text-sm text-muted-foreground">
+            No history data available yet
+          </div>
+        )}
+        {!historyLoading && intentHistory.length > 0 && (
+          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3">
+            {[5, 4, 3, 2, 1, 0].map((heat) => (
+              <div key={heat} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: HEAT_LABELS[heat].chartColor }} />
+                <span>{HEAT_LABELS[heat].label}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Heat Breakdown Bar */}

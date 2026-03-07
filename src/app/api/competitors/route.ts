@@ -27,8 +27,12 @@ export async function GET() {
     }
   >();
 
-  const ownAppearances: { keyword: string; position: number; title: string; url: string }[] = [];
+  const ownAppearances: { keyword: string; position: number; title: string; url: string; viewCount: number | null; publishedAt: string | null; subscriberCount: number | null }[] = [];
   const totalKeywords = keywords.filter((kw) => kw.checks[0]).length;
+
+  // Get channel name from settings
+  const channelNameSetting = await prisma.setting.findUnique({ where: { key: "channelName" } });
+  const ourChannelName = channelNameSetting?.value || "Our Channel";
 
   for (const kw of keywords) {
     const check = kw.checks[0];
@@ -41,6 +45,9 @@ export async function GET() {
           position: result.position,
           title: result.title,
           url: result.url,
+          viewCount: result.viewCount,
+          publishedAt: result.publishedAt,
+          subscriberCount: result.subscriberCount,
         });
         continue;
       }
@@ -65,10 +72,21 @@ export async function GET() {
   }
 
   // Convert to sorted array
-  const competitors = Array.from(competitorMap.values())
+  const allEntries = Array.from(competitorMap.values());
+
+  // Add own channel as an entry
+  if (ownAppearances.length > 0) {
+    allEntries.push({
+      channel: ourChannelName,
+      appearances: ownAppearances,
+    });
+  }
+
+  const competitors = allEntries
     .map((c) => {
       const positions = c.appearances.map((a) => a.position);
       const avgPosition = positions.reduce((s, p) => s + p, 0) / positions.length;
+      const isOwn = c.channel === ourChannelName && ownAppearances.length > 0;
       return {
         channel: c.channel,
         keywordCount: new Set(c.appearances.map((a) => a.keyword)).size,
@@ -76,6 +94,7 @@ export async function GET() {
         bestPosition: Math.min(...positions),
         totalAppearances: c.appearances.length,
         appearances: c.appearances,
+        isOwn,
       };
     })
     .sort((a, b) => b.keywordCount - a.keywordCount || a.avgPosition - b.avgPosition);

@@ -1,5 +1,6 @@
 import { prisma } from "./prisma";
 import { searchYouTube, YouTubeResult } from "./youtube";
+import { fetchVideoPublishDates, fetchChannelSubscriberCounts } from "./youtube-api";
 import { sleep } from "./utils";
 
 let isRunning = false;
@@ -78,6 +79,15 @@ async function runCheckForKeyword(
     }
   }
 
+  // Enrich with YouTube Data API (publishedAt, subscriberCount)
+  const videoIds = results.map((r) => r.videoId);
+  const channelIds = results.map((r) => r.channelId).filter(Boolean);
+
+  const [publishDates, subscriberCounts] = await Promise.all([
+    fetchVideoPublishDates(videoIds),
+    fetchChannelSubscriberCounts(channelIds),
+  ]);
+
   let ownPosition: number | null = null;
   let ownVideoUrl: string | null = null;
   let ownVideoTitle: string | null = null;
@@ -103,8 +113,8 @@ async function runCheckForKeyword(
       channel: result.channelTitle,
       isOwn: own,
       viewCount: result.viewCount,
-      publishedAt: result.publishedAt,
-      subscriberCount: result.subscriberCount,
+      publishedAt: publishDates.get(result.videoId) || result.publishedAt,
+      subscriberCount: subscriberCounts.get(result.channelId) || result.subscriberCount,
     };
   });
 

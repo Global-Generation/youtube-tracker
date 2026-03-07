@@ -54,4 +54,5 @@ export interface Settings {
   channelId?: string;
   channelName?: string;
   checkIntervalMinutes?: string;
+  youtubeApiKey?: string;
 }

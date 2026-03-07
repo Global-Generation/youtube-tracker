@@ -29,6 +29,7 @@ export default function SettingsForm() {
           channelId: settings.channelId || "",
           channelName: settings.channelName || "",
           checkIntervalMinutes: settings.checkIntervalMinutes || "30",
+          youtubeApiKey: settings.youtubeApiKey || "",
         }),
       });
 
@@ -108,6 +109,28 @@ export default function SettingsForm() {
         />
         <p className="text-xs text-muted-foreground mt-1.5">
           How often to check positions (requires server restart to apply)
+        </p>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-foreground mb-1.5">
+          YouTube Data API Key
+        </label>
+        <input
+          type="password"
+          value={settings.youtubeApiKey || ""}
+          onChange={(e) =>
+            setSettings({ ...settings, youtubeApiKey: e.target.value })
+          }
+          placeholder="AIzaSy..."
+          className="w-full px-3 py-2 bg-card border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring/40 focus:border-primary transition-colors"
+        />
+        <p className="text-xs text-muted-foreground mt-1.5">
+          Needed for publish dates & subscriber counts. Get it at{" "}
+          <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+            Google Cloud Console
+          </a>
+          {" "}→ YouTube Data API v3
         </p>
       </div>
 

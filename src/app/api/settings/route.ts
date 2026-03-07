@@ -12,13 +12,14 @@ export async function GET() {
 
 export async function PUT(request: Request) {
   const body = await request.json();
-  const { channelId, channelName, checkIntervalMinutes } = body;
+  const { channelId, channelName, checkIntervalMinutes, youtubeApiKey } = body;
 
   const updates: { key: string; value: string }[] = [];
   if (channelId !== undefined) updates.push({ key: "channelId", value: channelId });
   if (channelName !== undefined) updates.push({ key: "channelName", value: channelName });
   if (checkIntervalMinutes !== undefined)
     updates.push({ key: "checkIntervalMinutes", value: String(checkIntervalMinutes) });
+  if (youtubeApiKey !== undefined) updates.push({ key: "youtubeApiKey", value: youtubeApiKey });
 
   for (const { key, value } of updates) {
     await prisma.setting.upsert({

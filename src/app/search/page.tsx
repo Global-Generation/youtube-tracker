@@ -17,8 +17,8 @@ interface DailyData {
   estimatedMinutesWatched: number;
 }
 
-interface VideoData {
-  videoId: string;
+interface SearchTermData {
+  videoId: string; // actually search term from insightTrafficSourceDetail
   views: number;
 }
 
@@ -34,7 +34,7 @@ interface Summary {
 interface SearchTrafficData {
   connected: boolean;
   daily: DailyData[];
-  videos: VideoData[];
+  videos: SearchTermData[];
   summary: Summary;
 }
 
@@ -263,43 +263,25 @@ export default function SearchPage() {
         </div>
       </div>
 
-      {/* Video Table */}
+      {/* Search Terms Table */}
       <div className="bg-card rounded-xl border border-border/60 overflow-hidden">
         <div className="px-5 py-4 border-b border-border/40">
-          <h2 className="text-sm font-semibold">Top Videos by Search Traffic</h2>
+          <h2 className="text-sm font-semibold">Top Search Terms</h2>
         </div>
         <div className="divide-y divide-border/40">
-          {videos.map((video, i) => (
-            <div key={video.videoId} className="flex items-center gap-4 px-5 py-3 hover:bg-muted/30 transition-colors">
+          {videos.map((term, i) => (
+            <div key={term.videoId} className="flex items-center gap-4 px-5 py-3 hover:bg-muted/30 transition-colors">
               <span className="text-xs text-muted-foreground font-medium w-6 text-right shrink-0">
                 {i + 1}
               </span>
-              <a
-                href={`https://www.youtube.com/watch?v=${video.videoId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="shrink-0"
-              >
-                <img
-                  src={`https://i.ytimg.com/vi/${video.videoId}/default.jpg`}
-                  alt=""
-                  className="w-20 h-[45px] object-cover rounded"
-                  loading="lazy"
-                />
-              </a>
-              <a
-                href={`https://www.youtube.com/watch?v=${video.videoId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-1 min-w-0 text-sm font-medium text-primary hover:underline truncate"
-              >
-                {video.videoId}
-              </a>
+              <span className="flex-1 min-w-0 text-sm font-medium truncate">
+                {term.videoId}
+              </span>
               <div className="text-right shrink-0">
-                <div className="text-sm font-semibold">{formatNum(video.views)}</div>
+                <div className="text-sm font-semibold">{formatNum(term.views)}</div>
                 {totalSearchViews > 0 && (
                   <div className="text-[11px] text-muted-foreground">
-                    {Math.round((video.views / totalSearchViews) * 100)}%
+                    {Math.round((term.views / totalSearchViews) * 100)}%
                   </div>
                 )}
               </div>

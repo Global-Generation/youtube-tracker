@@ -626,7 +626,19 @@ export default function SearchPage() {
           </div>
         </div>
         {historyLoading ? (
-          <div className="h-72 bg-muted/30 rounded-lg animate-pulse" />
+          <div className="h-72 flex items-end justify-around gap-2 px-4 pb-4">
+            {[65, 40, 55, 70, 45, 80, 50, 60, 75, 85, 55, 90, 48, 72].map((h, i) => (
+              <div
+                key={i}
+                className="flex-1 rounded-t-sm animate-pulse"
+                style={{
+                  height: `${h}%`,
+                  background: `linear-gradient(to top, var(--color-muted) 0%, transparent 100%)`,
+                  animationDelay: `${i * 100}ms`,
+                }}
+              />
+            ))}
+          </div>
         ) : (() => {
           const filtered = intentHistory.filter((d) => d.period >= intentFrom && d.period <= intentTo);
           return filtered.length > 0 ? (

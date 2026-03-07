@@ -83,9 +83,8 @@ export async function GET(request: Request) {
     const now = new Date();
     const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
-    const twelveMonthsAgo = new Date();
-    twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 11);
-    const startPeriod = `${twelveMonthsAgo.getFullYear()}-${String(twelveMonthsAgo.getMonth() + 1).padStart(2, "0")}`;
+    // Fixed start: January 2025 (when channel analytics data became meaningful)
+    const startPeriod = "2025-01";
 
     const allMonths = getAllMonths(startPeriod, currentPeriod);
 

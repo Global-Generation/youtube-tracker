@@ -66,6 +66,17 @@ export async function GET(request: Request) {
     // Determine which months need fetching
     let missingMonths = allMonths.filter((m) => !existingPeriods.has(m));
 
+    // Re-fetch months that have ≤25 terms (old cache from before per-video strategy)
+    const termCountByPeriod = new Map<string, number>();
+    for (const s of existingSnapshots) {
+      termCountByPeriod.set(s.period, (termCountByPeriod.get(s.period) || 0) + 1);
+    }
+    for (const [period, count] of termCountByPeriod) {
+      if (count <= 25 && !missingMonths.includes(period)) {
+        missingMonths.push(period);
+      }
+    }
+
     // Current month always needs refresh (data still accumulating)
     if (existingPeriods.has(currentPeriod) && !missingMonths.includes(currentPeriod)) {
       missingMonths.push(currentPeriod);

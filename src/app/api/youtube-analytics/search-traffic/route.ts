@@ -53,8 +53,9 @@ export async function GET(request: Request) {
         orderBy: { views: "desc" },
       });
 
-      // Use cache if fresh (< 6 hours old)
-      if (cached.length > 0) {
+      // Use cache if fresh (< 6 hours old) AND has more than 25 terms
+      // (old cache from before per-video strategy had exactly 25 terms)
+      if (cached.length > 25) {
         const oldestFetch = cached.reduce(
           (min, s) => (s.fetchedAt < min ? s.fetchedAt : min),
           cached[0].fetchedAt

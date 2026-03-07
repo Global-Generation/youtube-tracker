@@ -35,15 +35,32 @@ interface Competitor {
   appearances: Appearance[];
 }
 
+interface OwnChannel {
+  keywordCount: number;
+  avgPosition: number;
+  bestPosition: number;
+  totalAppearances: number;
+  totalKeywords: number;
+}
+
+interface CompetitorsData {
+  competitors: Competitor[];
+  ownChannel: OwnChannel | null;
+  marketAvg: number | null;
+}
+
+type MinKeywords = 0 | 3 | 5 | 10;
+
 export default function CompetitorsPage() {
-  const [competitors, setCompetitors] = useState<Competitor[]>([]);
+  const [data, setData] = useState<CompetitorsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [minKeywords, setMinKeywords] = useState<MinKeywords>(3);
 
   useEffect(() => {
     fetch("/api/competitors")
       .then((res) => res.json())
-      .then(setCompetitors)
+      .then((json: CompetitorsData) => setData(json))
       .finally(() => setLoading(false));
   }, []);
 
@@ -58,13 +75,20 @@ export default function CompetitorsPage() {
     );
   }
 
-  if (competitors.length === 0) {
+  if (!data || data.competitors.length === 0) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground bg-card rounded-xl border border-border/60">
         No competitor data yet. Run a check first.
       </div>
     );
   }
+
+  const { competitors: allCompetitors, ownChannel, marketAvg } = data;
+
+  // Filter competitors by minimum keyword count
+  const competitors = minKeywords > 0
+    ? allCompetitors.filter((c) => c.keywordCount >= minKeywords)
+    : allCompetitors;
 
   // Top competitors for charts
   const top15 = competitors.slice(0, 15);
@@ -84,6 +108,13 @@ export default function CompetitorsPage() {
     return "#ef4444";
   }
 
+  const filterOptions: { value: MinKeywords; label: string }[] = [
+    { value: 0, label: "All" },
+    { value: 3, label: "3+" },
+    { value: 5, label: "5+" },
+    { value: 10, label: "10+" },
+  ];
+
   return (
     <div>
       <div className="mb-6">
@@ -91,6 +122,63 @@ export default function CompetitorsPage() {
         <p className="text-muted-foreground text-sm mt-1">
           All channels appearing in your tracked keyword results
         </p>
+      </div>
+
+      {/* Us vs Market Card */}
+      {ownChannel && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+          <div className="bg-card rounded-xl p-4 border border-primary/30 bg-primary/5">
+            <div className="text-[11px] text-muted-foreground font-medium mb-1">Our Avg Position</div>
+            <div className="text-2xl font-semibold">{ownChannel.avgPosition}</div>
+            {marketAvg && (
+              <div className={`text-[11px] font-medium mt-1 ${ownChannel.avgPosition < marketAvg ? "text-success" : "text-danger"}`}>
+                {ownChannel.avgPosition < marketAvg
+                  ? `${(marketAvg - ownChannel.avgPosition).toFixed(1)} better than market`
+                  : `${(ownChannel.avgPosition - marketAvg).toFixed(1)} worse than market`
+                }
+              </div>
+            )}
+          </div>
+          <div className="bg-card rounded-xl p-4 border border-border/60">
+            <div className="text-[11px] text-muted-foreground font-medium mb-1">Keywords Ranked</div>
+            <div className="text-2xl font-semibold">{ownChannel.keywordCount}<span className="text-sm text-muted-foreground font-normal">/{ownChannel.totalKeywords}</span></div>
+            <div className="text-[11px] text-muted-foreground mt-1">
+              {Math.round((ownChannel.keywordCount / ownChannel.totalKeywords) * 100)}% coverage
+            </div>
+          </div>
+          <div className="bg-card rounded-xl p-4 border border-border/60">
+            <div className="text-[11px] text-muted-foreground font-medium mb-1">Our Best Position</div>
+            <div className="text-2xl font-semibold text-success">#{ownChannel.bestPosition}</div>
+          </div>
+          <div className="bg-card rounded-xl p-4 border border-border/60">
+            <div className="text-[11px] text-muted-foreground font-medium mb-1">Market Avg Position</div>
+            <div className="text-2xl font-semibold">{marketAvg ?? "—"}</div>
+            <div className="text-[11px] text-muted-foreground mt-1">
+              Across {allCompetitors.length} channels
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Filter */}
+      <div className="flex items-center gap-2 mb-6">
+        <span className="text-xs text-muted-foreground font-medium">Min keywords:</span>
+        {filterOptions.map((opt) => (
+          <button
+            key={opt.value}
+            onClick={() => setMinKeywords(opt.value)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              minKeywords === opt.value
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+        <span className="text-xs text-muted-foreground ml-2">
+          {competitors.length} channels
+        </span>
       </div>
 
       {/* Competitor Landscape Chart */}
@@ -211,6 +299,7 @@ export default function CompetitorsPage() {
       <div className="space-y-3">
         {competitors.map((comp) => {
           const isExpanded = expanded === comp.channel;
+          const hasTopOne = comp.bestPosition === 1;
           const byKeyword = new Map<string, Appearance[]>();
           for (const a of comp.appearances) {
             if (!byKeyword.has(a.keyword)) byKeyword.set(a.keyword, []);
@@ -220,7 +309,11 @@ export default function CompetitorsPage() {
           return (
             <div
               key={comp.channel}
-              className="border border-border/60 rounded-xl overflow-hidden bg-card"
+              className={`border rounded-xl overflow-hidden bg-card ${
+                hasTopOne
+                  ? "border-amber-500/40 bg-amber-500/5"
+                  : "border-border/60"
+              }`}
             >
               <button
                 onClick={() => setExpanded(isExpanded ? null : comp.channel)}
@@ -232,6 +325,11 @@ export default function CompetitorsPage() {
                     <span className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full font-medium">
                       {comp.keywordCount} keywords
                     </span>
+                    {hasTopOne && (
+                      <span className="text-xs px-2 py-0.5 bg-amber-500/15 text-amber-500 rounded-full font-semibold border border-amber-500/30">
+                        #1
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-5 text-sm">
                     <div className="hidden sm:block">
@@ -240,7 +338,7 @@ export default function CompetitorsPage() {
                     </div>
                     <div className="hidden sm:block">
                       <span className="text-muted-foreground">Best:</span>{" "}
-                      <span className="font-semibold text-success">
+                      <span className={`font-semibold ${hasTopOne ? "text-amber-500" : "text-success"}`}>
                         #{comp.bestPosition}
                       </span>
                     </div>

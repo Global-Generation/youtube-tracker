@@ -124,6 +124,15 @@ const HEAT_MAP: { pattern: string; heat: number }[] = [
   { pattern: "учеба в сша", heat: 2 },
   { pattern: "образование в сша", heat: 2 },
   { pattern: "global generation", heat: 2 },
+  // Broad catch-alls (order matters — checked after specific patterns)
+  { pattern: "поступить", heat: 5 },
+  { pattern: "поступлени", heat: 5 },
+  { pattern: "за границ", heat: 5 },
+  { pattern: "учеб", heat: 2 },
+  { pattern: "америк", heat: 2 },
+  { pattern: "нью йорк", heat: 1 },
+  { pattern: "нью-йорк", heat: 1 },
+  { pattern: "лекци", heat: 1 },
 ];
 
 function getHeatLevel(term: string): number {
@@ -234,10 +243,12 @@ function TermGroup({
   heat,
   terms,
   totalSearchViews,
+  isTracked,
 }: {
   heat: number;
   terms: TermWithHeat[];
   totalSearchViews: number;
+  isTracked?: (term: string) => boolean;
 }) {
   const info = HEAT_LABELS[heat];
   const groupViews = terms.reduce((s, t) => s + t.views, 0);
@@ -265,8 +276,13 @@ function TermGroup({
             <span className="text-xs text-muted-foreground font-medium w-5 text-right shrink-0">
               {i + 1}
             </span>
-            <span className="flex-1 min-w-0 text-sm font-medium truncate">
+            <span className="flex-1 min-w-0 text-sm font-medium truncate flex items-center gap-2">
               {term.term}
+              {isTracked && !isTracked(term.term) && heat > 0 && (
+                <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-warning/10 text-warning border border-warning/20 font-medium">
+                  Not tracked
+                </span>
+              )}
             </span>
             <div className="text-right shrink-0">
               <span className="text-sm font-semibold">{formatNum(term.views)}</span>
@@ -290,6 +306,17 @@ export default function SearchPage() {
   const [period, setPeriod] = useState<Period>("all");
   const [segment, setSegment] = useState<Segment>("week");
   const [heatFilter, setHeatFilter] = useState<number | null>(null); // null = all
+  const [trackedKeywords, setTrackedKeywords] = useState<string[]>([]);
+
+  // Fetch tracked keywords for "not tracked" badges
+  useEffect(() => {
+    fetch("/api/keywords")
+      .then((res) => res.json())
+      .then((kws: { text: string }[]) => {
+        setTrackedKeywords(kws.map((k) => k.text.toLowerCase()));
+      })
+      .catch(() => {});
+  }, []);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -363,6 +390,11 @@ export default function SearchPage() {
       </div>
     );
   }
+
+  const isTermTracked = (term: string): boolean => {
+    const lower = term.toLowerCase();
+    return trackedKeywords.some((kw) => lower.includes(kw) || kw.includes(lower));
+  };
 
   const { daily, videos, summary } = data;
   const totalSearchViews = videos.reduce((s, v) => s + v.views, 0);
@@ -566,6 +598,59 @@ export default function SearchPage() {
         </div>
       </div>
 
+      {/* Heat Breakdown Bar */}
+      {heatSummary.length > 0 && (
+        <div className="bg-card rounded-xl p-4 border border-border/60">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-semibold">Traffic by Intent</h2>
+            <span className="text-xs text-muted-foreground">{formatNum(totalSearchViews)} total views</span>
+          </div>
+          <div className="flex rounded-lg overflow-hidden h-8">
+            {heatSummary.map(({ heat, views }) => {
+              const pct = totalSearchViews > 0 ? (views / totalSearchViews) * 100 : 0;
+              if (pct < 1) return null;
+              const colors: Record<number, string> = {
+                5: "bg-red-500",
+                4: "bg-orange-500",
+                3: "bg-yellow-500",
+                2: "bg-blue-500",
+                1: "bg-slate-500",
+                0: "bg-muted-foreground/30",
+              };
+              return (
+                <div
+                  key={heat}
+                  className={`${colors[heat]} flex items-center justify-center text-[10px] font-semibold text-white min-w-[30px] transition-all`}
+                  style={{ width: `${pct}%` }}
+                  title={`${HEAT_LABELS[heat].label}: ${formatNum(views)} (${Math.round(pct)}%)`}
+                >
+                  {pct >= 8 && (
+                    <span className="truncate px-1">
+                      {HEAT_LABELS[heat].label} {Math.round(pct)}%
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
+            {heatSummary.map(({ heat, views }) => {
+              const colors: Record<number, string> = {
+                5: "bg-red-500", 4: "bg-orange-500", 3: "bg-yellow-500",
+                2: "bg-blue-500", 1: "bg-slate-500", 0: "bg-muted-foreground/30",
+              };
+              return (
+                <div key={heat} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <span className={`w-2 h-2 rounded-full ${colors[heat]}`} />
+                  <span>{HEAT_LABELS[heat].label}</span>
+                  <span className="font-medium text-foreground">{formatNum(views)}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Heat Level Summary */}
       <div className="flex flex-wrap gap-2">
         <button
@@ -605,6 +690,7 @@ export default function SearchPage() {
           heat={heatFilter}
           terms={filteredTerms}
           totalSearchViews={totalSearchViews}
+          isTracked={isTermTracked}
         />
       ) : (
         // All groups
@@ -615,6 +701,7 @@ export default function SearchPage() {
               heat={heat}
               terms={groupTerms}
               totalSearchViews={totalSearchViews}
+              isTracked={isTermTracked}
             />
           ))}
         </div>

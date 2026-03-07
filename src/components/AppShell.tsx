@@ -4,10 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 
-const NAV_LINKS = [
+const MAIN_NAV = [
   {
     href: "/",
-    label: "Dashboard",
+    label: "Rating",
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="3" width="7" height="7" rx="1" />
@@ -18,18 +18,8 @@ const NAV_LINKS = [
     ),
   },
   {
-    href: "/keywords",
-    label: "Keywords",
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="11" cy="11" r="8" />
-        <path d="m21 21-4.3-4.3" />
-      </svg>
-    ),
-  },
-  {
     href: "/search",
-    label: "Search",
+    label: "Search Terms",
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
@@ -45,6 +35,19 @@ const NAV_LINKS = [
         <circle cx="9" cy="7" r="4" />
         <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
         <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+      </svg>
+    ),
+  },
+];
+
+const BOTTOM_NAV = [
+  {
+    href: "/keywords",
+    label: "Keywords",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="11" cy="11" r="8" />
+        <path d="m21 21-4.3-4.3" />
       </svg>
     ),
   },
@@ -154,28 +157,53 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Nav links */}
-        <nav className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto">
-          {NAV_LINKS.map((link) => {
-            const active = isActive(link.href);
-            const showLabel = !collapsed || mobileOpen;
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 text-[13px]
-                  ${active
-                    ? "bg-primary/10 text-primary font-semibold"
-                    : "text-secondary-foreground hover:bg-muted hover:text-foreground"
-                  }
-                  ${!showLabel ? "justify-center" : ""}
-                `}
-                title={!showLabel ? link.label : undefined}
-              >
-                <span className="shrink-0">{link.icon}</span>
-                {showLabel && <span>{link.label}</span>}
-              </Link>
-            );
-          })}
+        <nav className="flex-1 py-3 px-2 overflow-y-auto flex flex-col">
+          <div className="space-y-0.5">
+            {MAIN_NAV.map((link) => {
+              const active = isActive(link.href);
+              const showLabel = !collapsed || mobileOpen;
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 text-[13px]
+                    ${active
+                      ? "bg-primary/10 text-primary font-semibold"
+                      : "text-secondary-foreground hover:bg-muted hover:text-foreground"
+                    }
+                    ${!showLabel ? "justify-center" : ""}
+                  `}
+                  title={!showLabel ? link.label : undefined}
+                >
+                  <span className="shrink-0">{link.icon}</span>
+                  {showLabel && <span>{link.label}</span>}
+                </Link>
+              );
+            })}
+          </div>
+          <div className="mt-auto pt-3 border-t border-border/40 space-y-0.5">
+            {BOTTOM_NAV.map((link) => {
+              const active = isActive(link.href);
+              const showLabel = !collapsed || mobileOpen;
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 text-[13px]
+                    ${active
+                      ? "bg-primary/10 text-primary font-semibold"
+                      : "text-secondary-foreground hover:bg-muted hover:text-foreground"
+                    }
+                    ${!showLabel ? "justify-center" : ""}
+                  `}
+                  title={!showLabel ? link.label : undefined}
+                >
+                  <span className="shrink-0">{link.icon}</span>
+                  {showLabel && <span>{link.label}</span>}
+                </Link>
+              );
+            })}
+          </div>
         </nav>
 
         {/* Collapse button — desktop only */}

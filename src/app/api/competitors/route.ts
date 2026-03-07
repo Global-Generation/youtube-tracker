@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
-  // Get the latest check for each keyword
+  // Get the latest check for each keyword — fetch ALL results (own + competitors)
   const keywords = await prisma.keyword.findMany({
     where: { isActive: true },
     include: {
@@ -11,7 +11,6 @@ export async function GET() {
         take: 1,
         include: {
           results: {
-            where: { isOwn: false },
             orderBy: { position: "asc" },
           },
         },
@@ -19,7 +18,7 @@ export async function GET() {
     },
   });
 
-  // Aggregate competitor appearances across all keywords
+  // Separate own vs competitor results
   const competitorMap = new Map<
     string,
     {
@@ -28,11 +27,24 @@ export async function GET() {
     }
   >();
 
+  const ownAppearances: { keyword: string; position: number; title: string; url: string }[] = [];
+  const totalKeywords = keywords.filter((kw) => kw.checks[0]).length;
+
   for (const kw of keywords) {
     const check = kw.checks[0];
     if (!check) continue;
 
     for (const result of check.results) {
+      if (result.isOwn) {
+        ownAppearances.push({
+          keyword: kw.text,
+          position: result.position,
+          title: result.title,
+          url: result.url,
+        });
+        continue;
+      }
+
       const channelKey = result.channel.toLowerCase();
       if (!competitorMap.has(channelKey)) {
         competitorMap.set(channelKey, {
@@ -68,5 +80,25 @@ export async function GET() {
     })
     .sort((a, b) => b.keywordCount - a.keywordCount || a.avgPosition - b.avgPosition);
 
-  return NextResponse.json(competitors);
+  // Own channel stats
+  let ownChannel = null;
+  if (ownAppearances.length > 0) {
+    const ownPositions = ownAppearances.map((a) => a.position);
+    const ownAvg = ownPositions.reduce((s, p) => s + p, 0) / ownPositions.length;
+    ownChannel = {
+      keywordCount: new Set(ownAppearances.map((a) => a.keyword)).size,
+      avgPosition: Math.round(ownAvg * 10) / 10,
+      bestPosition: Math.min(...ownPositions),
+      totalAppearances: ownAppearances.length,
+      totalKeywords,
+    };
+  }
+
+  // Market averages (across all competitors)
+  const allAvgPositions = competitors.map((c) => c.avgPosition);
+  const marketAvg = allAvgPositions.length > 0
+    ? Math.round((allAvgPositions.reduce((s, p) => s + p, 0) / allAvgPositions.length) * 10) / 10
+    : null;
+
+  return NextResponse.json({ competitors, ownChannel, marketAvg });
 }

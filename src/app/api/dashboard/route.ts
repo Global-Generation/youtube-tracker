@@ -2,6 +2,81 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { CLUSTERS } from "@/lib/clusters";
 
+interface ScorecardMetrics {
+  score: number;
+  avgPosition: number | null;
+  inTop3: number;
+  searchFootprint: number; // keywords in top-20
+}
+
+function computeScorecardMetrics(
+  checks: { ownPosition: number | null }[]
+): ScorecardMetrics {
+  const withPosition = checks.filter((c) => c.ownPosition !== null);
+  const avgPosition =
+    withPosition.length > 0
+      ? Math.round(
+          (withPosition.reduce((s, c) => s + c.ownPosition!, 0) /
+            withPosition.length) *
+            10
+        ) / 10
+      : null;
+
+  const coverage = checks.length > 0 ? withPosition.length / checks.length : 0;
+  let score = 1;
+  if (avgPosition !== null && coverage > 0) {
+    const posScore = Math.max(0, Math.min(10, 11 - avgPosition));
+    score = Math.round(posScore * coverage * 10) / 10;
+    score = Math.max(1, Math.min(10, score));
+  }
+
+  return {
+    score,
+    avgPosition,
+    inTop3: withPosition.filter((c) => c.ownPosition! <= 3).length,
+    searchFootprint: withPosition.length, // in top-20 = found
+  };
+}
+
+async function getHistoricalMetrics(
+  daysAgo: number,
+  keywordIds: number[]
+): Promise<ScorecardMetrics | null> {
+  const targetDate = new Date();
+  targetDate.setDate(targetDate.getDate() - daysAgo);
+
+  // Find the closest check round at or before targetDate
+  const closestCheck = await prisma.check.findFirst({
+    where: {
+      checkedAt: { lte: targetDate },
+      keywordId: { in: keywordIds },
+    },
+    orderBy: { checkedAt: "desc" },
+    select: { checkedAt: true },
+  });
+
+  if (!closestCheck) return null;
+
+  // Round to 10-minute window (same logic as history API)
+  const d = new Date(closestCheck.checkedAt);
+  d.setMinutes(Math.floor(d.getMinutes() / 10) * 10, 0, 0);
+  const windowStart = new Date(d);
+  const windowEnd = new Date(d.getTime() + 10 * 60 * 1000);
+
+  // Get all checks in this round
+  const roundChecks = await prisma.check.findMany({
+    where: {
+      checkedAt: { gte: windowStart, lt: windowEnd },
+      keywordId: { in: keywordIds },
+    },
+    select: { ownPosition: true },
+  });
+
+  if (roundChecks.length === 0) return null;
+
+  return computeScorecardMetrics(roundChecks);
+}
+
 export async function GET() {
   const keywords = await prisma.keyword.findMany({
     where: { isActive: true },
@@ -131,6 +206,17 @@ export async function GET() {
     })
     .slice(0, 10);
 
+  // Compute scorecards with historical deltas
+  const keywordIds = keywords.map((k) => k.id);
+  const currentMetrics = computeScorecardMetrics(
+    keywordStats.map((k) => ({ ownPosition: k.currentPosition }))
+  );
+
+  const [weekAgo, monthAgo] = await Promise.all([
+    getHistoricalMetrics(7, keywordIds),
+    getHistoricalMetrics(30, keywordIds),
+  ]);
+
   return NextResponse.json({
     overall: {
       totalKeywords: keywordStats.length,
@@ -141,6 +227,11 @@ export async function GET() {
       inTop5: allWithPosition.filter((k) => k.currentPosition! <= 5).length,
       inTop10: allWithPosition.filter((k) => k.currentPosition! <= 10).length,
       notFound: keywordStats.filter((k) => k.currentPosition === null).length,
+    },
+    scorecards: {
+      current: currentMetrics,
+      weekAgo,
+      monthAgo,
     },
     clusters,
     problemKeywords,

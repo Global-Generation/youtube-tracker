@@ -6,6 +6,7 @@ import PositionBadge from "@/components/PositionBadge";
 import PositionChangeArrow from "@/components/PositionChangeArrow";
 import ClusterHistoryChart from "@/components/ClusterHistoryChart";
 import VideoThumbnail, { formatViewCount, formatPublishDate } from "@/components/VideoThumbnail";
+import ScorecardGrid, { ScorecardData } from "@/components/ScorecardGrid";
 
 interface KeywordStat {
   id: number;
@@ -52,6 +53,7 @@ interface OverallStats {
 
 interface DashboardData {
   overall: OverallStats;
+  scorecards: ScorecardData;
   clusters: ClusterData[];
   problemKeywords: KeywordStat[];
 }
@@ -131,6 +133,12 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div className="space-y-6 animate-pulse">
+        <div className="h-12 bg-muted rounded-xl w-1/3" />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-20 bg-muted rounded-xl" />
+          ))}
+        </div>
         <div className="h-48 bg-muted rounded-xl" />
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => (
@@ -171,6 +179,9 @@ export default function DashboardPage() {
           </button>
         </div>
       </div>
+
+      {/* Scorecards */}
+      <ScorecardGrid data={data.scorecards} />
 
       {/* Cluster History Chart */}
       <ClusterHistoryChart />

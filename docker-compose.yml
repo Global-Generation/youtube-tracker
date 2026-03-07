@@ -6,6 +6,8 @@ services:
       - "3003:3000"
     volumes:
       - yt_data:/app/data
+    env_file:
+      - .env
     environment:
       - NODE_ENV=production
       - YT_DLP_PATH=/usr/local/bin/yt-dlp

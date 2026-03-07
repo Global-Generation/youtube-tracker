@@ -1,9 +1,11 @@
-import { google } from "googleapis";
 import { prisma } from "./prisma";
 
 const SCOPES = ["https://www.googleapis.com/auth/yt-analytics.readonly"];
+const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
+const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
+const YT_ANALYTICS_URL = "https://youtubeanalytics.googleapis.com/v2/reports";
 
-function getOAuthClient() {
+function getOAuthConfig() {
   const clientId = process.env.YOUTUBE_OAUTH_CLIENT_ID;
   const clientSecret = process.env.YOUTUBE_OAUTH_CLIENT_SECRET;
   const redirectUri = process.env.YOUTUBE_OAUTH_REDIRECT_URI;
@@ -14,21 +16,43 @@ function getOAuthClient() {
     );
   }
 
-  return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+  return { clientId, clientSecret, redirectUri };
 }
 
 export function getAuthUrl(): string {
-  const oauth2Client = getOAuthClient();
-  return oauth2Client.generateAuthUrl({
+  const { clientId, redirectUri } = getOAuthConfig();
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: "code",
+    scope: SCOPES.join(" "),
     access_type: "offline",
-    scope: SCOPES,
     prompt: "consent",
   });
+  return `${GOOGLE_AUTH_URL}?${params.toString()}`;
 }
 
 export async function exchangeCodeForTokens(code: string) {
-  const oauth2Client = getOAuthClient();
-  const { tokens } = await oauth2Client.getToken(code);
+  const { clientId, clientSecret, redirectUri } = getOAuthConfig();
+
+  const res = await fetch(GOOGLE_TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      code,
+      client_id: clientId,
+      client_secret: clientSecret,
+      redirect_uri: redirectUri,
+      grant_type: "authorization_code",
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Token exchange failed: ${text}`);
+  }
+
+  const tokens = await res.json();
 
   // Save tokens to Setting table
   const upserts = [];
@@ -50,12 +74,13 @@ export async function exchangeCodeForTokens(code: string) {
       })
     );
   }
-  if (tokens.expiry_date) {
+  if (tokens.expires_in) {
+    const expiryDate = String(Date.now() + tokens.expires_in * 1000);
     upserts.push(
       prisma.setting.upsert({
         where: { key: "youtube_oauth_token_expiry" },
-        create: { key: "youtube_oauth_token_expiry", value: String(tokens.expiry_date) },
-        update: { value: String(tokens.expiry_date) },
+        create: { key: "youtube_oauth_token_expiry", value: expiryDate },
+        update: { value: expiryDate },
       })
     );
   }
@@ -69,8 +94,8 @@ async function getSetting(key: string): Promise<string | null> {
   return setting?.value ?? null;
 }
 
-async function getAuthedClient() {
-  const oauth2Client = getOAuthClient();
+async function getAccessToken(): Promise<string> {
+  const { clientId, clientSecret } = getOAuthConfig();
 
   const accessToken = await getSetting("youtube_oauth_access_token");
   const refreshToken = await getSetting("youtube_oauth_refresh_token");
@@ -80,40 +105,54 @@ async function getAuthedClient() {
     throw new Error("YouTube not connected. Visit /api/auth/youtube to authorize.");
   }
 
-  oauth2Client.setCredentials({
-    access_token: accessToken,
-    refresh_token: refreshToken,
-    expiry_date: expiryStr ? parseInt(expiryStr) : undefined,
-  });
-
-  // Auto-refresh if expired
+  // Check if token is still valid (with 60s buffer)
   const expiry = expiryStr ? parseInt(expiryStr) : 0;
-  if (Date.now() >= expiry - 60_000) {
-    const { credentials } = await oauth2Client.refreshAccessToken();
-    const saves = [];
-    if (credentials.access_token) {
-      saves.push(
-        prisma.setting.upsert({
-          where: { key: "youtube_oauth_access_token" },
-          create: { key: "youtube_oauth_access_token", value: credentials.access_token },
-          update: { value: credentials.access_token },
-        })
-      );
-    }
-    if (credentials.expiry_date) {
-      saves.push(
-        prisma.setting.upsert({
-          where: { key: "youtube_oauth_token_expiry" },
-          create: { key: "youtube_oauth_token_expiry", value: String(credentials.expiry_date) },
-          update: { value: String(credentials.expiry_date) },
-        })
-      );
-    }
-    await Promise.all(saves);
-    oauth2Client.setCredentials(credentials);
+  if (accessToken && Date.now() < expiry - 60_000) {
+    return accessToken;
   }
 
-  return oauth2Client;
+  // Refresh the token
+  const res = await fetch(GOOGLE_TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+      grant_type: "refresh_token",
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Token refresh failed: ${text}`);
+  }
+
+  const data = await res.json();
+
+  const saves = [];
+  if (data.access_token) {
+    saves.push(
+      prisma.setting.upsert({
+        where: { key: "youtube_oauth_access_token" },
+        create: { key: "youtube_oauth_access_token", value: data.access_token },
+        update: { value: data.access_token },
+      })
+    );
+  }
+  if (data.expires_in) {
+    const newExpiry = String(Date.now() + data.expires_in * 1000);
+    saves.push(
+      prisma.setting.upsert({
+        where: { key: "youtube_oauth_token_expiry" },
+        create: { key: "youtube_oauth_token_expiry", value: newExpiry },
+        update: { value: newExpiry },
+      })
+    );
+  }
+  await Promise.all(saves);
+
+  return data.access_token;
 }
 
 export async function isYouTubeConnected(): Promise<boolean> {
@@ -132,15 +171,28 @@ export interface SearchTrafficVideo {
   views: number;
 }
 
+async function queryYouTubeAnalytics(params: Record<string, string>): Promise<unknown[][]> {
+  const token = await getAccessToken();
+  const searchParams = new URLSearchParams({ ids: "channel==MINE", ...params });
+
+  const res = await fetch(`${YT_ANALYTICS_URL}?${searchParams.toString()}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`YouTube Analytics API error: ${res.status} ${text}`);
+  }
+
+  const data = await res.json();
+  return data.rows ?? [];
+}
+
 export async function getSearchTrafficByDay(
   startDate: string,
   endDate: string
 ): Promise<SearchTrafficDay[]> {
-  const auth = await getAuthedClient();
-  const youtubeAnalytics = google.youtubeAnalytics({ version: "v2", auth });
-
-  const res = await youtubeAnalytics.reports.query({
-    ids: "channel==MINE",
+  const rows = await queryYouTubeAnalytics({
     dimensions: "day",
     metrics: "views,estimatedMinutesWatched",
     filters: "insightTrafficSourceType==YT_SEARCH",
@@ -149,7 +201,7 @@ export async function getSearchTrafficByDay(
     sort: "day",
   });
 
-  return (res.data.rows ?? []).map((row) => ({
+  return rows.map((row) => ({
     date: row[0] as string,
     views: row[1] as number,
     estimatedMinutesWatched: row[2] as number,
@@ -161,21 +213,17 @@ export async function getSearchTrafficByVideo(
   endDate: string,
   maxResults = 20
 ): Promise<SearchTrafficVideo[]> {
-  const auth = await getAuthedClient();
-  const youtubeAnalytics = google.youtubeAnalytics({ version: "v2", auth });
-
-  const res = await youtubeAnalytics.reports.query({
-    ids: "channel==MINE",
+  const rows = await queryYouTubeAnalytics({
     dimensions: "video",
     metrics: "views",
     filters: "insightTrafficSourceType==YT_SEARCH",
     startDate,
     endDate,
     sort: "-views",
-    maxResults,
+    maxResults: String(maxResults),
   });
 
-  return (res.data.rows ?? []).map((row) => ({
+  return rows.map((row) => ({
     videoId: row[0] as string,
     views: row[1] as number,
   }));

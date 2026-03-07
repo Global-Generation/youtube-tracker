@@ -10,6 +10,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV DATABASE_URL="file:./dev.db"
+ENV NODE_OPTIONS="--max-old-space-size=1536"
 RUN npx prisma generate && npm run build
 
 # Stage 3: Production

@@ -586,8 +586,12 @@ export const HEAT_LABELS: Record<number, { label: string; color: string; bg: str
 
 export function getHeatLevel(term: string): number {
   const lower = term.toLowerCase();
+  let maxHeat = 0;
   for (const { pattern, heat } of HEAT_MAP) {
-    if (lower.includes(pattern)) return heat;
+    if (lower.includes(pattern) && heat > maxHeat) {
+      maxHeat = heat;
+      if (maxHeat === 5) return 5; // can't go higher, short-circuit
+    }
   }
-  return 0;
+  return maxHeat;
 }

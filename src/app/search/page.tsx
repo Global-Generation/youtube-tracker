@@ -10,6 +10,7 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
+  Legend,
   ResponsiveContainer,
 } from "recharts";
 import { getHeatLevel, HEAT_LABELS } from "@/lib/heat-map";
@@ -239,6 +240,11 @@ export default function SearchPage() {
   const [intentHistory, setIntentHistory] = useState<IntentMonthData[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [visibleIntents, setVisibleIntents] = useState<Set<string>>(new Set(["hot", "warm", "medium", "cool", "cold", "untracked"]));
+  const [intentFrom, setIntentFrom] = useState("2025-01");
+  const [intentTo, setIntentTo] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  });
 
   // Fetch intent history (monthly term snapshots)
   useEffect(() => {
@@ -598,78 +604,88 @@ export default function SearchPage() {
             )}
           </div>
         </div>
+        {/* Date Range Filter */}
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center gap-2">
+            <label className="text-[11px] text-muted-foreground font-medium">From</label>
+            <input
+              type="month"
+              value={intentFrom}
+              onChange={(e) => setIntentFrom(e.target.value)}
+              className="px-2 py-1 rounded-md border border-border/60 bg-muted text-xs font-medium text-foreground"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-[11px] text-muted-foreground font-medium">To</label>
+            <input
+              type="month"
+              value={intentTo}
+              onChange={(e) => setIntentTo(e.target.value)}
+              className="px-2 py-1 rounded-md border border-border/60 bg-muted text-xs font-medium text-foreground"
+            />
+          </div>
+        </div>
         {historyLoading ? (
-          <div className="h-64 bg-muted/30 rounded-lg animate-pulse" />
-        ) : intentHistory.length > 0 ? (
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={intentHistory} stackOffset="none">
-                <defs>
-                  {[
-                    { id: "hotGrad", color: HEAT_LABELS[5].chartColor },
-                    { id: "warmGrad", color: HEAT_LABELS[4].chartColor },
-                    { id: "medGrad", color: HEAT_LABELS[3].chartColor },
-                    { id: "coolGrad", color: HEAT_LABELS[2].chartColor },
-                    { id: "coldGrad", color: HEAT_LABELS[1].chartColor },
-                    { id: "untGrad", color: HEAT_LABELS[0].chartColor },
-                  ].map(({ id, color }) => (
-                    <linearGradient key={id} id={id} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={color} stopOpacity={0.6} />
-                      <stop offset="95%" stopColor={color} stopOpacity={0.1} />
-                    </linearGradient>
-                  ))}
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.5} />
-                <XAxis
-                  dataKey="period"
-                  tickFormatter={(p: string) => {
-                    const d = new Date(p + "-01T00:00:00");
-                    return d.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
-                  }}
-                  tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <YAxis
-                  tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
-                  tickLine={false}
-                  axisLine={false}
-                  width={45}
-                  tickFormatter={formatNum}
-                />
-                <Tooltip
-                  contentStyle={{
-                    background: "var(--color-card)",
-                    border: "1px solid var(--color-border)",
-                    borderRadius: "8px",
-                    fontSize: "12px",
-                  }}
-                  labelFormatter={(p) => {
-                    const d = new Date(String(p) + "-01T00:00:00");
-                    return d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-                  }}
-                  formatter={(value, name) => {
-                    const labels: Record<string, string> = {
-                      hot: "Hot", warm: "Warm", medium: "Medium",
-                      cool: "Cool", cold: "Cold", untracked: "Untracked",
-                    };
-                    return [Number(value).toLocaleString(), labels[String(name)] || String(name)];
-                  }}
-                />
-                {visibleIntents.has("hot") && <Area type="monotone" dataKey="hot" stackId="1" stroke={HEAT_LABELS[5].chartColor} fill="url(#hotGrad)" strokeWidth={1.5} />}
-                {visibleIntents.has("warm") && <Area type="monotone" dataKey="warm" stackId="1" stroke={HEAT_LABELS[4].chartColor} fill="url(#warmGrad)" strokeWidth={1.5} />}
-                {visibleIntents.has("medium") && <Area type="monotone" dataKey="medium" stackId="1" stroke={HEAT_LABELS[3].chartColor} fill="url(#medGrad)" strokeWidth={1.5} />}
-                {visibleIntents.has("cool") && <Area type="monotone" dataKey="cool" stackId="1" stroke={HEAT_LABELS[2].chartColor} fill="url(#coolGrad)" strokeWidth={1.5} />}
-                {visibleIntents.has("cold") && <Area type="monotone" dataKey="cold" stackId="1" stroke={HEAT_LABELS[1].chartColor} fill="url(#coldGrad)" strokeWidth={1.5} />}
-                {visibleIntents.has("untracked") && <Area type="monotone" dataKey="untracked" stackId="1" stroke={HEAT_LABELS[0].chartColor} fill="url(#untGrad)" strokeWidth={1.5} />}
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        ) : (
-          <div className="h-32 flex items-center justify-center text-sm text-muted-foreground">
-            No history data available yet
-          </div>
-        )}
+          <div className="h-72 bg-muted/30 rounded-lg animate-pulse" />
+        ) : (() => {
+          const filtered = intentHistory.filter((d) => d.period >= intentFrom && d.period <= intentTo);
+          return filtered.length > 0 ? (
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={filtered}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.3} vertical={false} />
+                  <XAxis
+                    dataKey="period"
+                    tickFormatter={(p: string) => {
+                      const d = new Date(p + "-01T00:00:00");
+                      return d.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+                    }}
+                    tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+                    tickLine={false}
+                    axisLine={false}
+                    interval={0}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+                    tickLine={false}
+                    axisLine={false}
+                    width={45}
+                    tickFormatter={formatNum}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      background: "var(--color-card)",
+                      border: "1px solid var(--color-border)",
+                      borderRadius: "8px",
+                      fontSize: "12px",
+                    }}
+                    labelFormatter={(p) => {
+                      const d = new Date(String(p) + "-01T00:00:00");
+                      return d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+                    }}
+                    formatter={(value, name) => {
+                      const labels: Record<string, string> = {
+                        hot: "Hot", warm: "Warm", medium: "Medium",
+                        cool: "Cool", cold: "Cold", untracked: "Untracked",
+                      };
+                      return [Number(value).toLocaleString(), labels[String(name)] || String(name)];
+                    }}
+                  />
+                  {visibleIntents.has("untracked") && <Bar dataKey="untracked" stackId="1" fill={HEAT_LABELS[0].chartColor} />}
+                  {visibleIntents.has("cold") && <Bar dataKey="cold" stackId="1" fill={HEAT_LABELS[1].chartColor} />}
+                  {visibleIntents.has("cool") && <Bar dataKey="cool" stackId="1" fill={HEAT_LABELS[2].chartColor} />}
+                  {visibleIntents.has("medium") && <Bar dataKey="medium" stackId="1" fill={HEAT_LABELS[3].chartColor} />}
+                  {visibleIntents.has("warm") && <Bar dataKey="warm" stackId="1" fill={HEAT_LABELS[4].chartColor} />}
+                  {visibleIntents.has("hot") && <Bar dataKey="hot" stackId="1" fill={HEAT_LABELS[5].chartColor} radius={[3, 3, 0, 0]} />}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="h-32 flex items-center justify-center text-sm text-muted-foreground">
+              No history data available for this range
+            </div>
+          );
+        })()}
       </div>
 
       {/* Heat Breakdown Bar */}

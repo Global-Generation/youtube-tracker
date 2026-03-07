@@ -192,9 +192,9 @@ export async function getSearchTrafficByDay(
   startDate: string,
   endDate: string
 ): Promise<SearchTrafficDay[]> {
-  // Valid report: dimensions=insightTrafficSourceType with day
+  // Must include insightTrafficSourceType in dimensions when filtering by it
   const rows = await queryYouTubeAnalytics({
-    dimensions: "day",
+    dimensions: "day,insightTrafficSourceType",
     metrics: "views,estimatedMinutesWatched",
     filters: "insightTrafficSourceType==YT_SEARCH",
     startDate,
@@ -202,10 +202,11 @@ export async function getSearchTrafficByDay(
     sort: "day",
   });
 
+  // row: [day, trafficSourceType, views, estimatedMinutesWatched]
   return rows.map((row) => ({
     date: row[0] as string,
-    views: row[1] as number,
-    estimatedMinutesWatched: row[2] as number,
+    views: row[2] as number,
+    estimatedMinutesWatched: row[3] as number,
   }));
 }
 

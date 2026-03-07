@@ -232,7 +232,7 @@ export default function SearchPage() {
   const [data, setData] = useState<SearchTrafficData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [period, setPeriod] = useState<Period>("all");
+  const [period, setPeriod] = useState<Period>("90");
   const [segment, setSegment] = useState<Segment>("week");
   const [heatFilter, setHeatFilter] = useState<number | null>(null); // null = all
   const [trackedKeywords, setTrackedKeywords] = useState<string[]>([]);

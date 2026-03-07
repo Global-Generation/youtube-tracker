@@ -352,7 +352,7 @@ export default function CompetitorsPage() {
                       </span>
                     </div>
                     <div className="hidden sm:block">
-                      <span className="text-muted-foreground">Videos:</span>{" "}
+                      <span className="text-muted-foreground">Appearances:</span>{" "}
                       <span className="font-semibold">{comp.totalAppearances}</span>
                     </div>
                     <svg

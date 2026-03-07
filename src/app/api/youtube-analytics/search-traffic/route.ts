@@ -72,21 +72,22 @@ export async function GET(request: Request) {
     // Fetch fresh data if no cache
     const fetchTerms = videos.length === 0;
 
-    const [dailyResult, videosResult] = await Promise.allSettled([
-      getSearchTrafficByDay(startDate, endDate),
-      fetchTerms
-        ? getAllSearchTerms(termsStartDate, endDate)
-        : Promise.resolve(videos),
-    ]);
-
-    const daily = dailyResult.status === "fulfilled" ? dailyResult.value : [];
-    videos = videosResult.status === "fulfilled" ? videosResult.value : [];
-
-    if (dailyResult.status === "rejected") {
-      console.error("Daily query failed:", dailyResult.reason);
+    // Run daily query FIRST — independent from terms query
+    // This prevents rate limit from per-video terms queries killing daily data
+    let daily: { date: string; views: number; estimatedMinutesWatched: number }[] = [];
+    try {
+      daily = await getSearchTrafficByDay(startDate, endDate);
+    } catch (err) {
+      console.error("Daily query failed:", err);
     }
-    if (videosResult.status === "rejected") {
-      console.error("Search terms query failed:", videosResult.reason);
+
+    // Then fetch terms (200+ API calls) separately
+    if (fetchTerms) {
+      try {
+        videos = await getAllSearchTerms(termsStartDate, endDate);
+      } catch (err) {
+        console.error("Search terms query failed:", err);
+      }
     }
 
     // Cache the freshly fetched terms

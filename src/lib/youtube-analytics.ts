@@ -171,7 +171,7 @@ export interface SearchTrafficVideo {
   views: number;
 }
 
-async function queryYouTubeAnalytics(params: Record<string, string>): Promise<unknown[][]> {
+async function queryYouTubeAnalytics(params: Record<string, string>, retries = 2): Promise<unknown[][]> {
   const token = await getAccessToken();
   const searchParams = new URLSearchParams({ ids: "channel==MINE", ...params });
 
@@ -181,6 +181,12 @@ async function queryYouTubeAnalytics(params: Record<string, string>): Promise<un
 
   if (!res.ok) {
     const text = await res.text();
+    // Retry on rate limit (429 or RESOURCE_EXHAUSTED)
+    if ((res.status === 429 || text.includes("RATE_LIMIT_EXCEEDED")) && retries > 0) {
+      console.warn(`[YouTube Analytics] Rate limited, waiting 10s before retry (${retries} left)`);
+      await new Promise((r) => setTimeout(r, 10_000));
+      return queryYouTubeAnalytics(params, retries - 1);
+    }
     throw new Error(`YouTube Analytics API error: ${res.status} ${text}`);
   }
 
@@ -297,9 +303,9 @@ export async function getAllSearchTerms(
     for (const { term, views } of terms) {
       termMap.set(term, (termMap.get(term) || 0) + views);
     }
-    // Small delay between calls to avoid rate limiting
+    // Delay between calls to avoid rate limiting (720 queries/min limit)
     if (i < videoIds.length - 1) {
-      await new Promise((r) => setTimeout(r, 100));
+      await new Promise((r) => setTimeout(r, 300));
     }
   }
 

@@ -23,10 +23,20 @@ export async function GET(request: Request) {
   const startDate = startDateObj.toISOString().split("T")[0];
 
   try {
-    const [daily, videos] = await Promise.all([
+    const [dailyResult, videosResult] = await Promise.allSettled([
       getSearchTrafficByDay(startDate, endDate),
       getSearchTrafficByVideo(startDate, endDate, 20),
     ]);
+
+    const daily = dailyResult.status === "fulfilled" ? dailyResult.value : [];
+    const videos = videosResult.status === "fulfilled" ? videosResult.value : [];
+
+    if (dailyResult.status === "rejected") {
+      console.error("Daily query failed:", dailyResult.reason);
+    }
+    if (videosResult.status === "rejected") {
+      console.error("Search terms query failed:", videosResult.reason);
+    }
 
     // Compute summary metrics
     const totalViews = daily.reduce((s, d) => s + d.views, 0);

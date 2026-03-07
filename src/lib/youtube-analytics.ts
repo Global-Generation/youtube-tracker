@@ -192,8 +192,9 @@ export async function getSearchTrafficByDay(
   startDate: string,
   endDate: string
 ): Promise<SearchTrafficDay[]> {
+  // Valid report: dimensions=insightTrafficSourceType with day
   const rows = await queryYouTubeAnalytics({
-    dimensions: "day,insightTrafficSourceType",
+    dimensions: "day",
     metrics: "views,estimatedMinutesWatched",
     filters: "insightTrafficSourceType==YT_SEARCH",
     startDate,
@@ -203,8 +204,8 @@ export async function getSearchTrafficByDay(
 
   return rows.map((row) => ({
     date: row[0] as string,
-    views: row[2] as number,
-    estimatedMinutesWatched: row[3] as number,
+    views: row[1] as number,
+    estimatedMinutesWatched: row[2] as number,
   }));
 }
 
@@ -213,8 +214,7 @@ export async function getSearchTrafficByVideo(
   endDate: string,
   maxResults = 20
 ): Promise<SearchTrafficVideo[]> {
-  // YouTube Analytics API doesn't support dimensions=video with traffic source filter
-  // Use insightTrafficSourceDetail to get top search terms instead
+  // insightTrafficSourceDetail requires insightTrafficSourceType in filters
   const rows = await queryYouTubeAnalytics({
     dimensions: "insightTrafficSourceDetail",
     metrics: "views",

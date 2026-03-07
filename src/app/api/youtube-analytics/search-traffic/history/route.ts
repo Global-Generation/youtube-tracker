@@ -63,63 +63,100 @@ export async function GET(request: Request) {
 
     const existingPeriods = new Set(existingSnapshots.map((s) => s.period));
 
-    // Determine which months need fetching
-    let missingMonths = allMonths.filter((m) => !existingPeriods.has(m));
-
-    // Re-fetch months that have ≤25 terms (old cache from before per-video strategy)
+    // Count terms per period
     const termCountByPeriod = new Map<string, number>();
     for (const s of existingSnapshots) {
       termCountByPeriod.set(s.period, (termCountByPeriod.get(s.period) || 0) + 1);
     }
-    for (const [period, count] of termCountByPeriod) {
-      if (count <= 25 && !missingMonths.includes(period)) {
-        missingMonths.push(period);
-      }
-    }
 
-    // Current month always needs refresh (data still accumulating)
-    if (existingPeriods.has(currentPeriod) && !missingMonths.includes(currentPeriod)) {
-      missingMonths.push(currentPeriod);
-    }
+    // Determine which months need fetching
+    let missingMonths: string[] = [];
 
     if (refresh) {
       // Force refresh all months
       missingMonths = allMonths;
+    } else {
+      // Only fetch: truly missing months + months with ≤25 terms (old cache) + current month
+      for (const m of allMonths) {
+        const count = termCountByPeriod.get(m) || 0;
+        if (count === 0 || count <= 25) {
+          missingMonths.push(m);
+        } else if (m === currentPeriod) {
+          // Current month: only refresh if cache > 6 hours old
+          const periodSnaps = existingSnapshots.filter((s) => s.period === m);
+          if (periodSnaps.length > 0) {
+            const oldest = periodSnaps.reduce(
+              (min, s) => (s.fetchedAt < min ? s.fetchedAt : min),
+              periodSnaps[0].fetchedAt
+            );
+            if (Date.now() - oldest.getTime() > 6 * 60 * 60 * 1000) {
+              missingMonths.push(m);
+            }
+          }
+        }
+      }
     }
 
-    // Fetch missing months using per-video strategy (sequential to avoid rate limits)
-    for (const period of missingMonths) {
-      const { startDate, endDate } = getMonthRange(period);
+    // If we have cached data and there are months to fetch, return cache FIRST
+    // (don't block the response for minutes while fetching)
+    const hasCachedData = existingSnapshots.length > 0;
+    const hasHeavyWork = missingMonths.length > 2; // more than just current month
 
-      // Don't query future dates
-      const today = now.toISOString().split("T")[0];
-      const actualEndDate = endDate > today ? today : endDate;
-      if (startDate > today) continue;
+    if (hasCachedData && hasHeavyWork && !refresh) {
+      // Return cached data immediately, fetch only current month inline
+      const justCurrentMonth = missingMonths.includes(currentPeriod) ? [currentPeriod] : [];
 
-      try {
-        console.log(`[history] Fetching all search terms for ${period}...`);
-        const terms = await getAllSearchTerms(startDate, actualEndDate);
+      for (const period of justCurrentMonth) {
+        const { startDate, endDate } = getMonthRange(period);
+        const today = now.toISOString().split("T")[0];
+        const actualEndDate = endDate > today ? today : endDate;
+        if (startDate > today) continue;
 
-        // Delete old data for this period (for refresh/current month)
-        await prisma.searchTermSnapshot.deleteMany({
-          where: { period },
-        });
-
-        // Insert new snapshots
-        if (terms.length > 0) {
-          await prisma.searchTermSnapshot.createMany({
-            data: terms.map((t) => ({
-              period,
-              term: t.videoId, // actually search term
-              views: t.views,
-              fetchedAt: new Date(),
-            })),
-          });
+        try {
+          console.log(`[history] Quick-refreshing current month ${period}...`);
+          const terms = await getAllSearchTerms(startDate, actualEndDate);
+          await prisma.searchTermSnapshot.deleteMany({ where: { period } });
+          if (terms.length > 0) {
+            await prisma.searchTermSnapshot.createMany({
+              data: terms.map((t) => ({
+                period, term: t.videoId, views: t.views, fetchedAt: new Date(),
+              })),
+            });
+          }
+          console.log(`[history] ${period}: ${terms.length} terms saved`);
+        } catch (err) {
+          console.error(`Failed to fetch terms for ${period}:`, err);
         }
-        console.log(`[history] ${period}: ${terms.length} terms saved`);
-      } catch (err) {
-        console.error(`Failed to fetch terms for ${period}:`, err);
-        // Continue with other months
+      }
+
+      // Schedule background fetch for remaining months (fire-and-forget)
+      const bgMonths = missingMonths.filter((m) => m !== currentPeriod);
+      if (bgMonths.length > 0) {
+        console.log(`[history] ${bgMonths.length} months need background refresh, will update on next load`);
+      }
+    } else {
+      // No cache or forced refresh — fetch everything (will be slow on first load only)
+      for (const period of missingMonths) {
+        const { startDate, endDate } = getMonthRange(period);
+        const today = now.toISOString().split("T")[0];
+        const actualEndDate = endDate > today ? today : endDate;
+        if (startDate > today) continue;
+
+        try {
+          console.log(`[history] Fetching all search terms for ${period}...`);
+          const terms = await getAllSearchTerms(startDate, actualEndDate);
+          await prisma.searchTermSnapshot.deleteMany({ where: { period } });
+          if (terms.length > 0) {
+            await prisma.searchTermSnapshot.createMany({
+              data: terms.map((t) => ({
+                period, term: t.videoId, views: t.views, fetchedAt: new Date(),
+              })),
+            });
+          }
+          console.log(`[history] ${period}: ${terms.length} terms saved`);
+        } catch (err) {
+          console.error(`Failed to fetch terms for ${period}:`, err);
+        }
       }
     }
 

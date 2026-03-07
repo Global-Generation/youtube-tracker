@@ -269,7 +269,7 @@ export default function SearchPage() {
           setIntentHistory(data);
         }
       })
-      .catch(() => {})
+      .catch((err) => console.error("Intent history fetch failed:", err))
       .finally(() => setHistoryLoading(false));
   }, []);
 

@@ -225,6 +225,7 @@ export default function SearchPage() {
   const [trackedKeywords, setTrackedKeywords] = useState<string[]>([]);
   const [intentHistory, setIntentHistory] = useState<IntentMonthData[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
+  const [visibleIntents, setVisibleIntents] = useState<Set<string>>(new Set(["hot", "warm", "medium", "cool", "cold", "untracked"]));
 
   // Fetch intent history (monthly term snapshots)
   useEffect(() => {
@@ -545,14 +546,44 @@ export default function SearchPage() {
 
       {/* Intent Dynamics Chart */}
       <div className="bg-card rounded-xl p-5 border border-border/60">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           <div>
             <h2 className="text-sm font-semibold">Intent Dynamics</h2>
             <p className="text-[11px] text-muted-foreground mt-0.5">Monthly search views by intent level</p>
           </div>
-          {historyLoading && (
-            <span className="text-[11px] text-muted-foreground animate-pulse">Loading history...</span>
-          )}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {([
+              { key: "hot", heat: 5 },
+              { key: "warm", heat: 4 },
+              { key: "medium", heat: 3 },
+              { key: "cool", heat: 2 },
+              { key: "cold", heat: 1 },
+              { key: "untracked", heat: 0 },
+            ] as const).map(({ key, heat }) => {
+              const active = visibleIntents.has(key);
+              return (
+                <button
+                  key={key}
+                  onClick={() => {
+                    const next = new Set(visibleIntents);
+                    if (active) next.delete(key); else next.add(key);
+                    setVisibleIntents(next);
+                  }}
+                  className={`px-2 py-1 rounded-md text-[11px] font-medium transition-colors flex items-center gap-1.5 ${
+                    active
+                      ? "text-white"
+                      : "bg-muted text-muted-foreground opacity-50"
+                  }`}
+                  style={active ? { backgroundColor: HEAT_LABELS[heat].chartColor } : undefined}
+                >
+                  {HEAT_LABELS[heat].label}
+                </button>
+              );
+            })}
+            {historyLoading && (
+              <span className="text-[11px] text-muted-foreground animate-pulse ml-2">Loading...</span>
+            )}
+          </div>
         </div>
         {historyLoading ? (
           <div className="h-64 bg-muted/30 rounded-lg animate-pulse" />
@@ -612,28 +643,18 @@ export default function SearchPage() {
                     return [Number(value).toLocaleString(), labels[String(name)] || String(name)];
                   }}
                 />
-                <Area type="monotone" dataKey="hot" stackId="1" stroke={HEAT_LABELS[5].chartColor} fill="url(#hotGrad)" strokeWidth={1.5} />
-                <Area type="monotone" dataKey="warm" stackId="1" stroke={HEAT_LABELS[4].chartColor} fill="url(#warmGrad)" strokeWidth={1.5} />
-                <Area type="monotone" dataKey="medium" stackId="1" stroke={HEAT_LABELS[3].chartColor} fill="url(#medGrad)" strokeWidth={1.5} />
-                <Area type="monotone" dataKey="cool" stackId="1" stroke={HEAT_LABELS[2].chartColor} fill="url(#coolGrad)" strokeWidth={1.5} />
-                <Area type="monotone" dataKey="cold" stackId="1" stroke={HEAT_LABELS[1].chartColor} fill="url(#coldGrad)" strokeWidth={1.5} />
-                <Area type="monotone" dataKey="untracked" stackId="1" stroke={HEAT_LABELS[0].chartColor} fill="url(#untGrad)" strokeWidth={1.5} />
+                {visibleIntents.has("hot") && <Area type="monotone" dataKey="hot" stackId="1" stroke={HEAT_LABELS[5].chartColor} fill="url(#hotGrad)" strokeWidth={1.5} />}
+                {visibleIntents.has("warm") && <Area type="monotone" dataKey="warm" stackId="1" stroke={HEAT_LABELS[4].chartColor} fill="url(#warmGrad)" strokeWidth={1.5} />}
+                {visibleIntents.has("medium") && <Area type="monotone" dataKey="medium" stackId="1" stroke={HEAT_LABELS[3].chartColor} fill="url(#medGrad)" strokeWidth={1.5} />}
+                {visibleIntents.has("cool") && <Area type="monotone" dataKey="cool" stackId="1" stroke={HEAT_LABELS[2].chartColor} fill="url(#coolGrad)" strokeWidth={1.5} />}
+                {visibleIntents.has("cold") && <Area type="monotone" dataKey="cold" stackId="1" stroke={HEAT_LABELS[1].chartColor} fill="url(#coldGrad)" strokeWidth={1.5} />}
+                {visibleIntents.has("untracked") && <Area type="monotone" dataKey="untracked" stackId="1" stroke={HEAT_LABELS[0].chartColor} fill="url(#untGrad)" strokeWidth={1.5} />}
               </AreaChart>
             </ResponsiveContainer>
           </div>
         ) : (
           <div className="h-32 flex items-center justify-center text-sm text-muted-foreground">
             No history data available yet
-          </div>
-        )}
-        {!historyLoading && intentHistory.length > 0 && (
-          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3">
-            {[5, 4, 3, 2, 1, 0].map((heat) => (
-              <div key={heat} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: HEAT_LABELS[heat].chartColor }} />
-                <span>{HEAT_LABELS[heat].label}</span>
-              </div>
-            ))}
           </div>
         )}
       </div>

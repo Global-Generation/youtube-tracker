@@ -53,10 +53,11 @@ model CheckResult {
 }
 
 model SearchTermSnapshot {
-  id     Int    @id @default(autoincrement())
-  period String // "2025-01" YYYY-MM format
-  term   String
-  views  Int
+  id        Int      @id @default(autoincrement())
+  period    String   // "2025-01" YYYY-MM format
+  term      String
+  views     Int
+  fetchedAt DateTime @default(now())
 
   @@unique([period, term])
   @@index([period])

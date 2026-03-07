@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import {
   isYouTubeConnected,
-  getSearchTrafficByVideo,
+  getAllSearchTerms,
 } from "@/lib/youtube-analytics";
 
 function getMonthRange(period: string): { startDate: string; endDate: string } {
@@ -76,7 +76,7 @@ export async function GET(request: Request) {
       missingMonths = allMonths;
     }
 
-    // Fetch missing months from YouTube Analytics API (sequential to avoid rate limits)
+    // Fetch missing months using per-video strategy (sequential to avoid rate limits)
     for (const period of missingMonths) {
       const { startDate, endDate } = getMonthRange(period);
 
@@ -86,7 +86,8 @@ export async function GET(request: Request) {
       if (startDate > today) continue;
 
       try {
-        const terms = await getSearchTrafficByVideo(startDate, actualEndDate, 25);
+        console.log(`[history] Fetching all search terms for ${period}...`);
+        const terms = await getAllSearchTerms(startDate, actualEndDate);
 
         // Delete old data for this period (for refresh/current month)
         await prisma.searchTermSnapshot.deleteMany({
@@ -100,9 +101,11 @@ export async function GET(request: Request) {
               period,
               term: t.videoId, // actually search term
               views: t.views,
+              fetchedAt: new Date(),
             })),
           });
         }
+        console.log(`[history] ${period}: ${terms.length} terms saved`);
       } catch (err) {
         console.error(`Failed to fetch terms for ${period}:`, err);
         // Continue with other months

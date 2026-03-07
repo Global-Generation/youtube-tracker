@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 import {
   isYouTubeConnected,
   getSearchTrafficByDay,
-  getSearchTrafficByVideo,
+  getAllSearchTerms,
 } from "@/lib/youtube-analytics";
+
+function getCurrentPeriod(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
 
 export async function GET(request: Request) {
   const connected = await isYouTubeConnected();
@@ -16,6 +22,7 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const daysParam = searchParams.get("days") || "90";
+  const refresh = searchParams.get("refresh") === "true";
 
   const endDate = new Date().toISOString().split("T")[0];
   let startDate: string;
@@ -36,20 +43,62 @@ export async function GET(request: Request) {
       ? startDate
       : termsStartObj.toISOString().split("T")[0];
 
+    // Check if we have cached terms for the current period
+    const period = getCurrentPeriod();
+    let videos: { videoId: string; views: number }[] = [];
+
+    if (!refresh) {
+      const cached = await prisma.searchTermSnapshot.findMany({
+        where: { period },
+        orderBy: { views: "desc" },
+      });
+
+      // Use cache if fresh (< 6 hours old)
+      if (cached.length > 0) {
+        const oldestFetch = cached.reduce(
+          (min, s) => (s.fetchedAt < min ? s.fetchedAt : min),
+          cached[0].fetchedAt
+        );
+        const ageMs = Date.now() - oldestFetch.getTime();
+        const SIX_HOURS = 6 * 60 * 60 * 1000;
+
+        if (ageMs < SIX_HOURS) {
+          videos = cached.map((s) => ({ videoId: s.term, views: s.views }));
+        }
+      }
+    }
+
+    // Fetch fresh data if no cache
+    const fetchTerms = videos.length === 0;
+
     const [dailyResult, videosResult] = await Promise.allSettled([
       getSearchTrafficByDay(startDate, endDate),
-      // YouTube Analytics API limits insightTrafficSourceDetail to maxResults=25
-      getSearchTrafficByVideo(termsStartDate, endDate, 25),
+      fetchTerms
+        ? getAllSearchTerms(termsStartDate, endDate)
+        : Promise.resolve(videos),
     ]);
 
     const daily = dailyResult.status === "fulfilled" ? dailyResult.value : [];
-    const videos = videosResult.status === "fulfilled" ? videosResult.value : [];
+    videos = videosResult.status === "fulfilled" ? videosResult.value : [];
 
     if (dailyResult.status === "rejected") {
       console.error("Daily query failed:", dailyResult.reason);
     }
     if (videosResult.status === "rejected") {
       console.error("Search terms query failed:", videosResult.reason);
+    }
+
+    // Cache the freshly fetched terms
+    if (fetchTerms && videos.length > 0) {
+      await prisma.searchTermSnapshot.deleteMany({ where: { period } });
+      await prisma.searchTermSnapshot.createMany({
+        data: videos.map((v) => ({
+          period,
+          term: v.videoId,
+          views: v.views,
+          fetchedAt: new Date(),
+        })),
+      });
     }
 
     // Compute summary metrics

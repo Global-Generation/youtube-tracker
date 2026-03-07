@@ -166,6 +166,7 @@ function TermGroup({
   totalSearchViews: number;
   isTracked?: (term: string) => boolean;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const info = HEAT_LABELS[heat];
   const groupViews = terms.reduce((s, t) => s + t.views, 0);
   const dotColor =
@@ -175,6 +176,10 @@ function TermGroup({
     heat >= 2 ? "bg-blue-400" :
     heat >= 1 ? "bg-slate-400" :
     "bg-muted-foreground/30";
+
+  const INITIAL_SHOW = 10;
+  const visibleTerms = expanded ? terms : terms.slice(0, INITIAL_SHOW);
+  const hasMore = terms.length > INITIAL_SHOW;
 
   return (
     <div className={`rounded-xl border overflow-hidden ${info.bg}`}>
@@ -187,7 +192,7 @@ function TermGroup({
         <span className={`text-sm font-semibold ${info.color}`}>{formatNum(groupViews)} views</span>
       </div>
       <div className="bg-card/80 divide-y divide-border/30">
-        {terms.map((term, i) => (
+        {visibleTerms.map((term, i) => (
           <div key={term.term} className="flex items-center gap-3 px-5 py-2.5 hover:bg-muted/30 transition-colors">
             <span className="text-xs text-muted-foreground font-medium w-5 text-right shrink-0">
               {i + 1}
@@ -210,6 +215,14 @@ function TermGroup({
             </div>
           </div>
         ))}
+        {hasMore && (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="w-full px-5 py-2.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors"
+          >
+            {expanded ? "Show less" : `Show all ${terms.length} terms`}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -745,6 +758,10 @@ export default function SearchPage() {
       </div>
 
       {/* Search Terms — Grouped by Heat Level */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold">{termsWithHeat.length} Search Terms</h2>
+        {loading && <span className="text-xs text-muted-foreground animate-pulse">Loading terms...</span>}
+      </div>
       {heatFilter !== null ? (
         // Single group when filtered
         <TermGroup

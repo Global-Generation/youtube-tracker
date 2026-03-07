@@ -232,3 +232,75 @@ export async function getSearchTrafficByVideo(
     views: row[1] as number,
   }));
 }
+
+// Get up to 200 video IDs with views in date range
+export async function getChannelVideoIds(
+  startDate: string,
+  endDate: string,
+): Promise<string[]> {
+  const rows = await queryYouTubeAnalytics({
+    dimensions: "video",
+    metrics: "views",
+    startDate,
+    endDate,
+    sort: "-views",
+    maxResults: "200",
+  });
+
+  return rows.map((row) => row[0] as string);
+}
+
+// Get search terms for a single video (up to 25)
+async function getSearchTermsForVideo(
+  videoId: string,
+  startDate: string,
+  endDate: string,
+): Promise<{ term: string; views: number }[]> {
+  try {
+    const rows = await queryYouTubeAnalytics({
+      dimensions: "insightTrafficSourceDetail",
+      metrics: "views",
+      filters: `video==${videoId};insightTrafficSourceType==YT_SEARCH`,
+      startDate,
+      endDate,
+      sort: "-views",
+      maxResults: "25",
+    });
+
+    return rows.map((row) => ({
+      term: row[0] as string,
+      views: row[1] as number,
+    }));
+  } catch {
+    // Some videos may not have search traffic data
+    return [];
+  }
+}
+
+// Get ALL search terms across all channel videos (merged & summed)
+export async function getAllSearchTerms(
+  startDate: string,
+  endDate: string,
+): Promise<SearchTrafficVideo[]> {
+  const videoIds = await getChannelVideoIds(startDate, endDate);
+  console.log(`[getAllSearchTerms] Found ${videoIds.length} videos, fetching search terms...`);
+
+  const termMap = new Map<string, number>();
+
+  for (let i = 0; i < videoIds.length; i++) {
+    const terms = await getSearchTermsForVideo(videoIds[i], startDate, endDate);
+    for (const { term, views } of terms) {
+      termMap.set(term, (termMap.get(term) || 0) + views);
+    }
+    // Small delay between calls to avoid rate limiting
+    if (i < videoIds.length - 1) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }
+
+  console.log(`[getAllSearchTerms] Found ${termMap.size} unique terms across ${videoIds.length} videos`);
+
+  return Array.from(termMap.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([term, views]) => ({ videoId: term, views }));
+}

@@ -15,17 +15,23 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const days = parseInt(searchParams.get("days") || "90");
+  const daysParam = searchParams.get("days") || "90";
 
   const endDate = new Date().toISOString().split("T")[0];
-  const startDateObj = new Date();
-  startDateObj.setDate(startDateObj.getDate() - days);
-  const startDate = startDateObj.toISOString().split("T")[0];
+  let startDate: string;
+  if (daysParam === "all") {
+    startDate = "2020-01-01"; // far enough back for all data
+  } else {
+    const days = parseInt(daysParam);
+    const startDateObj = new Date();
+    startDateObj.setDate(startDateObj.getDate() - days);
+    startDate = startDateObj.toISOString().split("T")[0];
+  }
 
   try {
     const [dailyResult, videosResult] = await Promise.allSettled([
       getSearchTrafficByDay(startDate, endDate),
-      getSearchTrafficByVideo(startDate, endDate, 20),
+      getSearchTrafficByVideo(startDate, endDate, 200),
     ]);
 
     const daily = dailyResult.status === "fulfilled" ? dailyResult.value : [];

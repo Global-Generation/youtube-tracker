@@ -217,7 +217,8 @@ function formatSegmentLabel(label: string, segment: Segment): string {
     return d.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
   }
   if (segment === "week") {
-    return "W " + formatDate(label);
+    const d = new Date(label + "T00:00:00");
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   }
   return formatDate(label);
 }

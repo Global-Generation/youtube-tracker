@@ -29,9 +29,16 @@ export async function GET(request: Request) {
   }
 
   try {
+    // Search terms query fails on ranges > ~1 year, cap it
+    const termsStartObj = new Date();
+    termsStartObj.setDate(termsStartObj.getDate() - 365);
+    const termsStartDate = startDate > termsStartObj.toISOString().split("T")[0]
+      ? startDate
+      : termsStartObj.toISOString().split("T")[0];
+
     const [dailyResult, videosResult] = await Promise.allSettled([
       getSearchTrafficByDay(startDate, endDate),
-      getSearchTrafficByVideo(startDate, endDate, 200),
+      getSearchTrafficByVideo(termsStartDate, endDate, 200),
     ]);
 
     const daily = dailyResult.status === "fulfilled" ? dailyResult.value : [];

@@ -38,7 +38,8 @@ export async function GET(request: Request) {
 
     const [dailyResult, videosResult] = await Promise.allSettled([
       getSearchTrafficByDay(startDate, endDate),
-      getSearchTrafficByVideo(termsStartDate, endDate, 200),
+      // YouTube Analytics API limits insightTrafficSourceDetail to maxResults=25
+      getSearchTrafficByVideo(termsStartDate, endDate, 25),
     ]);
 
     const daily = dailyResult.status === "fulfilled" ? dailyResult.value : [];

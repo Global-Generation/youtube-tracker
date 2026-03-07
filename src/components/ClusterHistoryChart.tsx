@@ -43,23 +43,46 @@ const COMBINED_COLOR = "#111827";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function CustomTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
+
+  const items = payload
+    .filter((p: { value: unknown }) => p.value != null)
+    .map((p: { name: string; color: string; value: number; dataKey: string; payload: Record<string, number | string | null> }) => {
+      // Calculate change from previous data point
+      const prevKey = `__prev_${p.dataKey}`;
+      const prevVal = p.payload[prevKey] as number | null;
+      const change = prevVal != null ? Math.round((p.value - prevVal) * 10) / 10 : null;
+      return { ...p, change };
+    });
+
+  // Sort: Combined first, then by position (best = lowest number first)
+  items.sort((a: { dataKey: string; value: number }, b: { dataKey: string; value: number }) => {
+    if (a.dataKey === COMBINED_KEY) return -1;
+    if (b.dataKey === COMBINED_KEY) return 1;
+    return a.value - b.value;
+  });
+
   return (
     <div className="bg-card border border-border/60 rounded-lg px-3 py-2 shadow-lg max-w-xs">
       <p className="text-xs text-muted-foreground mb-2">{label}</p>
-      {payload
-        .filter((p: { value: unknown }) => p.value != null)
-        .map((p: { name: string; color: string; value: number; dataKey: string }) => (
-          <div key={p.name} className="flex items-center gap-2 text-xs mb-0.5">
-            <span
-              className="w-2 h-2 rounded-full shrink-0"
-              style={{ background: p.color }}
-            />
-            <span className={`truncate ${p.dataKey === COMBINED_KEY ? "font-semibold text-foreground" : "text-muted-foreground"}`}>
-              {p.name}
+      {items.map((p: { name: string; color: string; value: number; dataKey: string; change: number | null }) => (
+        <div key={p.name} className="flex items-center gap-2 text-xs mb-0.5">
+          <span
+            className="w-2 h-2 rounded-full shrink-0"
+            style={{ background: p.color }}
+          />
+          <span className={`truncate ${p.dataKey === COMBINED_KEY ? "font-semibold text-foreground" : "text-muted-foreground"}`}>
+            {p.name}
+          </span>
+          <span className="font-semibold ml-auto">{p.value.toFixed(1)}</span>
+          {p.change != null && p.change !== 0 && (
+            <span className={`text-[10px] font-semibold ${
+              p.change < 0 ? "text-success" : "text-danger"
+            }`}>
+              {p.change < 0 ? "" : "+"}{p.change.toFixed(1)}
             </span>
-            <span className="font-semibold ml-auto">#{p.value}</span>
-          </div>
-        ))}
+          )}
+        </div>
+      ))}
     </div>
   );
 }
@@ -122,10 +145,24 @@ function addCombinedAverage(
   });
 }
 
+/** Add __prev_<key> fields so tooltip can show change from previous period */
+function addPrevValues(
+  data: Array<Record<string, string | number | null>>,
+  keys: string[]
+): Array<Record<string, string | number | null>> {
+  return data.map((entry, i) => {
+    const enriched: Record<string, string | number | null> = { ...entry };
+    for (const key of keys) {
+      enriched[`__prev_${key}`] = i > 0 ? (data[i - 1][key] as number | null) : null;
+    }
+    return enriched;
+  });
+}
+
 export default function ClusterHistoryChart() {
   const [data, setData] = useState<HistoryData | null>(null);
   const [period, setPeriod] = useState<Period>("day");
-  const [selectedClusters, setSelectedClusters] = useState<Set<string> | null>(null); // null = all
+  const [selectedClusters, setSelectedClusters] = useState<Set<string>>(new Set()); // empty = only combined
   const [showCombined, setShowCombined] = useState(true);
 
   useEffect(() => {
@@ -139,14 +176,16 @@ export default function ClusterHistoryChart() {
   if (!data || data.history.length === 0) return null;
 
   const allClusterIds = Object.keys(data.clusterNames);
-  const visibleClusters = selectedClusters === null
-    ? allClusterIds
-    : allClusterIds.filter((id) => selectedClusters.has(id));
+  const visibleClusters = allClusterIds.filter((id) => selectedClusters.has(id));
+  const isAllSelected = selectedClusters.size === allClusterIds.length;
 
+  // Combined uses ALL clusters always (not just visible), for consistent metric
   const aggregated = aggregateByPeriod(data.history, period, allClusterIds);
-  const withCombined = addCombinedAverage(aggregated, visibleClusters);
+  const withCombined = addCombinedAverage(aggregated, allClusterIds);
+  const allKeys = [COMBINED_KEY, ...allClusterIds];
+  const withPrev = addPrevValues(withCombined, allKeys);
 
-  const chartData = withCombined.map((entry) => {
+  const chartData = withPrev.map((entry) => {
     let dateLabel: string;
     if (period === "month") {
       const [y, m] = (entry.date as string).split("-");
@@ -167,33 +206,29 @@ export default function ClusterHistoryChart() {
 
   function toggleCluster(id: string) {
     setSelectedClusters((prev) => {
-      if (prev === null) {
-        // Currently "all" — switch to all except this one
-        const next = new Set(allClusterIds);
-        next.delete(id);
-        return next;
-      }
       const next = new Set(prev);
       if (next.has(id)) {
         next.delete(id);
       } else {
         next.add(id);
       }
-      // If all selected, go back to null (= all)
-      if (next.size === allClusterIds.length) return null;
       return next;
     });
   }
 
-  function selectAll() {
-    setSelectedClusters(null);
+  function toggleAll() {
+    if (isAllSelected) {
+      // Deselect all clusters (show only combined)
+      setSelectedClusters(new Set());
+    } else {
+      // Select all clusters
+      setSelectedClusters(new Set(allClusterIds));
+    }
   }
-
-  const isAllSelected = selectedClusters === null;
 
   return (
     <div className="bg-card rounded-xl border border-border/60 p-4">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-1">
         <h3 className="text-sm font-semibold">
           Cluster Positions Over Time
         </h3>
@@ -214,10 +249,15 @@ export default function ClusterHistoryChart() {
         </div>
       </div>
 
+      {/* Explanation */}
+      <p className="text-[11px] text-muted-foreground mb-3">
+        Средняя позиция в YouTube-поиске по кластерам. Ниже = лучше (1 = первое место). Изменение от предыдущего периода: <span className="text-success font-medium">-0.5</span> = улучшение, <span className="text-danger font-medium">+0.5</span> = ухудшение.
+      </p>
+
       {/* Cluster filter chips */}
       <div className="flex flex-wrap gap-1.5 mb-3">
         <button
-          onClick={selectAll}
+          onClick={toggleAll}
           className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors border ${
             isAllSelected
               ? "bg-foreground text-background border-foreground"
@@ -238,7 +278,7 @@ export default function ClusterHistoryChart() {
           Combined Avg
         </button>
         {allClusterIds.map((id) => {
-          const active = selectedClusters === null || selectedClusters.has(id);
+          const active = selectedClusters.has(id);
           const color = CLUSTER_COLORS[id] || "#6B7280";
           return (
             <button

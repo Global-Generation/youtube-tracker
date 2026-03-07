@@ -66,7 +66,6 @@ export async function GET() {
         appearances: c.appearances,
       };
     })
-    .filter((c) => c.keywordCount >= 2) // Only show competitors that appear in 2+ keywords
     .sort((a, b) => b.keywordCount - a.keywordCount || a.avgPosition - b.avgPosition);
 
   return NextResponse.json(competitors);

@@ -19,7 +19,6 @@ export const CLUSTERS: Cluster[] = [
       "Gap year перед поступлением в США",
       "Community college США",
       "Перевод из российского вуза в американский",
-      "Holistic admission",
       "Отличие бакалавриата США от Европы",
     ],
   },
@@ -44,7 +43,6 @@ export const CLUSTERS: Cluster[] = [
       "Спортивная стипендия США",
       "Financial aid для иностранных студентов",
       "Need blind admission",
-      "FAFSA для иностранцев",
     ],
   },
   {

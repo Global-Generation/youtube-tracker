@@ -58,7 +58,7 @@ export default function CompetitorsPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-semibold">Competitors</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Channels that appear in 2+ of your tracked keywords
+          All channels appearing in your tracked keyword results
         </p>
       </div>
 

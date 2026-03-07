@@ -11,6 +11,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
+import { CLUSTERS } from "@/lib/clusters";
 
 interface HistoryData {
   history: Array<Record<string, string | number | null>>;
@@ -25,17 +26,21 @@ const PERIOD_OPTIONS: { value: Period; label: string; days: number }[] = [
   { value: "month", label: "Months", days: 180 },
 ];
 
-const CLUSTER_COLORS: Record<string, string> = {
-  "admission-general": "#2563EB",
-  "masters-phd-mba": "#7C3AED",
-  scholarships: "#059669",
-  exams: "#D97706",
-  documents: "#DC2626",
-  universities: "#0891B2",
-  visa: "#DB2777",
-  "student-life": "#EA580C",
-  "application-process": "#4F46E5",
-};
+// Group clusters by heatLevel
+const HEAT_GROUPS: { level: number; label: string; color: string; clusterIds: string[] }[] = [
+  { level: 5, label: "Hot (5) — Готов покупать", color: "#DC2626", clusterIds: [] },
+  { level: 4, label: "Warm (4) — Активно готовится", color: "#D97706", clusterIds: [] },
+  { level: 3, label: "Medium (3) — Исследует", color: "#2563EB", clusterIds: [] },
+  { level: 2, label: "Cold (2) — Интересуется", color: "#6B7280", clusterIds: [] },
+];
+
+for (const cluster of CLUSTERS) {
+  const group = HEAT_GROUPS.find((g) => g.level === cluster.heatLevel);
+  if (group) group.clusterIds.push(cluster.id);
+}
+
+// Filter out empty groups
+const ACTIVE_HEAT_GROUPS = HEAT_GROUPS.filter((g) => g.clusterIds.length > 0);
 
 const COMBINED_KEY = "__combined__";
 const COMBINED_COLOR = "#111827";
@@ -47,14 +52,13 @@ function CustomTooltip({ active, payload, label }: any) {
   const items = payload
     .filter((p: { value: unknown }) => p.value != null)
     .map((p: { name: string; color: string; value: number; dataKey: string; payload: Record<string, number | string | null> }) => {
-      // Calculate change from previous data point
       const prevKey = `__prev_${p.dataKey}`;
       const prevVal = p.payload[prevKey] as number | null;
       const change = prevVal != null ? Math.round((p.value - prevVal) * 10) / 10 : null;
       return { ...p, change };
     });
 
-  // Sort: Combined first, then by position (best = lowest number first)
+  // Combined first, then by best position (lowest)
   items.sort((a: { dataKey: string; value: number }, b: { dataKey: string; value: number }) => {
     if (a.dataKey === COMBINED_KEY) return -1;
     if (b.dataKey === COMBINED_KEY) return 1;
@@ -90,7 +94,7 @@ function CustomTooltip({ active, payload, label }: any) {
 function aggregateByPeriod(
   history: Array<Record<string, string | number | null>>,
   period: Period,
-  clusterIds: string[]
+  keys: string[]
 ): Array<Record<string, string | number | null>> {
   if (period === "day") return history;
 
@@ -114,14 +118,14 @@ function aggregateByPeriod(
   const result: Array<Record<string, string | number | null>> = [];
   for (const [key, entries] of buckets) {
     const aggregated: Record<string, string | number | null> = { date: key };
-    for (const cid of clusterIds) {
+    for (const k of keys) {
       const values = entries
-        .map((e) => e[cid])
+        .map((e) => e[k])
         .filter((v): v is number => v != null);
       if (values.length > 0) {
-        aggregated[cid] = Math.round((values.reduce((s, v) => s + v, 0) / values.length) * 10) / 10;
+        aggregated[k] = Math.round((values.reduce((s, v) => s + v, 0) / values.length) * 10) / 10;
       } else {
-        aggregated[cid] = null;
+        aggregated[k] = null;
       }
     }
     result.push(aggregated);
@@ -130,13 +134,33 @@ function aggregateByPeriod(
   return result;
 }
 
-function addCombinedAverage(
-  data: Array<Record<string, string | number | null>>,
-  clusterIds: string[]
+/** Group cluster positions into heat-level averages */
+function groupByHeatLevel(
+  data: Array<Record<string, string | number | null>>
 ): Array<Record<string, string | number | null>> {
   return data.map((entry) => {
-    const values = clusterIds
-      .map((id) => entry[id])
+    const result: Record<string, string | number | null> = { date: entry.date };
+    for (const group of ACTIVE_HEAT_GROUPS) {
+      const values = group.clusterIds
+        .map((id) => entry[id])
+        .filter((v): v is number => v != null);
+      if (values.length > 0) {
+        result[`heat_${group.level}`] = Math.round((values.reduce((s, v) => s + v, 0) / values.length) * 10) / 10;
+      } else {
+        result[`heat_${group.level}`] = null;
+      }
+    }
+    return result;
+  });
+}
+
+function addCombinedAverage(
+  data: Array<Record<string, string | number | null>>,
+  keys: string[]
+): Array<Record<string, string | number | null>> {
+  return data.map((entry) => {
+    const values = keys
+      .map((k) => entry[k])
       .filter((v): v is number => v != null);
     const avg = values.length > 0
       ? Math.round((values.reduce((s, v) => s + v, 0) / values.length) * 10) / 10
@@ -145,7 +169,6 @@ function addCombinedAverage(
   });
 }
 
-/** Add __prev_<key> fields so tooltip can show change from previous period */
 function addPrevValues(
   data: Array<Record<string, string | number | null>>,
   keys: string[]
@@ -162,7 +185,7 @@ function addPrevValues(
 export default function ClusterHistoryChart() {
   const [data, setData] = useState<HistoryData | null>(null);
   const [period, setPeriod] = useState<Period>("day");
-  const [selectedClusters, setSelectedClusters] = useState<Set<string>>(new Set()); // empty = only combined
+  const [selectedHeats, setSelectedHeats] = useState<Set<number>>(new Set());
   const [showCombined, setShowCombined] = useState(true);
 
   useEffect(() => {
@@ -176,14 +199,21 @@ export default function ClusterHistoryChart() {
   if (!data || data.history.length === 0) return null;
 
   const allClusterIds = Object.keys(data.clusterNames);
-  const visibleClusters = allClusterIds.filter((id) => selectedClusters.has(id));
-  const isAllSelected = selectedClusters.size === allClusterIds.length;
+  const heatKeys = ACTIVE_HEAT_GROUPS.map((g) => `heat_${g.level}`);
+  const visibleHeatKeys = ACTIVE_HEAT_GROUPS
+    .filter((g) => selectedHeats.has(g.level))
+    .map((g) => `heat_${g.level}`);
+  const isAllSelected = selectedHeats.size === ACTIVE_HEAT_GROUPS.length;
 
-  // Combined uses ALL clusters always (not just visible), for consistent metric
+  // Aggregate raw cluster data by period first
   const aggregated = aggregateByPeriod(data.history, period, allClusterIds);
-  const withCombined = addCombinedAverage(aggregated, allClusterIds);
-  const allKeys = [COMBINED_KEY, ...allClusterIds];
-  const withPrev = addPrevValues(withCombined, allKeys);
+  // Then group by heat level
+  const heatData = groupByHeatLevel(aggregated);
+  // Add combined average (always across all heat levels)
+  const withCombined = addCombinedAverage(heatData, heatKeys);
+  // Add prev values for change calculation
+  const allLineKeys = [COMBINED_KEY, ...heatKeys];
+  const withPrev = addPrevValues(withCombined, allLineKeys);
 
   const chartData = withPrev.map((entry) => {
     let dateLabel: string;
@@ -204,13 +234,13 @@ export default function ClusterHistoryChart() {
     return { ...entry, date: dateLabel };
   });
 
-  function toggleCluster(id: string) {
-    setSelectedClusters((prev) => {
+  function toggleHeat(level: number) {
+    setSelectedHeats((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
+      if (next.has(level)) {
+        next.delete(level);
       } else {
-        next.add(id);
+        next.add(level);
       }
       return next;
     });
@@ -218,11 +248,9 @@ export default function ClusterHistoryChart() {
 
   function toggleAll() {
     if (isAllSelected) {
-      // Deselect all clusters (show only combined)
-      setSelectedClusters(new Set());
+      setSelectedHeats(new Set());
     } else {
-      // Select all clusters
-      setSelectedClusters(new Set(allClusterIds));
+      setSelectedHeats(new Set(ACTIVE_HEAT_GROUPS.map((g) => g.level)));
     }
   }
 
@@ -230,7 +258,7 @@ export default function ClusterHistoryChart() {
     <div className="bg-card rounded-xl border border-border/60 p-4">
       <div className="flex items-center justify-between mb-1">
         <h3 className="text-sm font-semibold">
-          Cluster Positions Over Time
+          Позиции по конверсионности
         </h3>
         <div className="flex gap-1 bg-muted rounded-lg p-0.5">
           {PERIOD_OPTIONS.map((opt) => (
@@ -249,12 +277,11 @@ export default function ClusterHistoryChart() {
         </div>
       </div>
 
-      {/* Explanation */}
       <p className="text-[11px] text-muted-foreground mb-3">
-        Средняя позиция в YouTube-поиске по кластерам. Ниже = лучше (1 = первое место). Изменение от предыдущего периода: <span className="text-success font-medium">-0.5</span> = улучшение, <span className="text-danger font-medium">+0.5</span> = ухудшение.
+        Средняя позиция в YouTube-поиске, сгруппированная по уровню конверсионности запроса. Ниже = лучше (1 = первое место). Изменение: <span className="text-success font-medium">-0.5</span> = рост, <span className="text-danger font-medium">+0.5</span> = падение.
       </p>
 
-      {/* Cluster filter chips */}
+      {/* Filter chips */}
       <div className="flex flex-wrap gap-1.5 mb-3">
         <button
           onClick={toggleAll}
@@ -277,21 +304,29 @@ export default function ClusterHistoryChart() {
         >
           Combined Avg
         </button>
-        {allClusterIds.map((id) => {
-          const active = selectedClusters.has(id);
-          const color = CLUSTER_COLORS[id] || "#6B7280";
+        {ACTIVE_HEAT_GROUPS.map((group) => {
+          const active = selectedHeats.has(group.level);
           return (
             <button
-              key={id}
-              onClick={() => toggleCluster(id)}
-              className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors border ${
+              key={group.level}
+              onClick={() => toggleHeat(group.level)}
+              className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors border flex items-center gap-1.5 ${
                 active
                   ? "text-white border-transparent"
                   : "bg-transparent text-muted-foreground border-border hover:border-foreground/40"
               }`}
-              style={active ? { background: color, borderColor: color } : {}}
+              style={active ? { background: group.color, borderColor: group.color } : {}}
             >
-              {data.clusterNames[id]}
+              <span className="inline-flex gap-px">
+                {Array.from({ length: group.level }, (_, i) => (
+                  <span
+                    key={i}
+                    className="w-1.5 h-1.5 rounded-full"
+                    style={{ background: active ? "#fff" : group.color }}
+                  />
+                ))}
+              </span>
+              {group.label}
             </button>
           );
         })}
@@ -344,19 +379,23 @@ export default function ClusterHistoryChart() {
               activeDot={{ r: 5, strokeWidth: 2, stroke: "#fff" }}
             />
           )}
-          {visibleClusters.map((id) => (
-            <Line
-              key={id}
-              type="monotone"
-              dataKey={id}
-              name={data.clusterNames[id]}
-              stroke={CLUSTER_COLORS[id] || "#6B7280"}
-              strokeWidth={2}
-              dot={false}
-              connectNulls
-              activeDot={{ r: 4, strokeWidth: 2, stroke: "#fff" }}
-            />
-          ))}
+          {ACTIVE_HEAT_GROUPS.map((group) => {
+            const key = `heat_${group.level}`;
+            if (!visibleHeatKeys.includes(key)) return null;
+            return (
+              <Line
+                key={key}
+                type="monotone"
+                dataKey={key}
+                name={group.label}
+                stroke={group.color}
+                strokeWidth={2}
+                dot={false}
+                connectNulls
+                activeDot={{ r: 4, strokeWidth: 2, stroke: "#fff" }}
+              />
+            );
+          })}
         </LineChart>
       </ResponsiveContainer>
     </div>

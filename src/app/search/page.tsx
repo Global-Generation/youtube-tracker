@@ -40,6 +40,7 @@ interface SearchTrafficData {
   daily: DailyData[];
   videos: SearchTermData[];
   summary: Summary;
+  intentHistory?: HistoryMonth[];
 }
 
 type Period = "30" | "90" | "180" | "365" | "all";
@@ -237,41 +238,12 @@ export default function SearchPage() {
   const [segment, setSegment] = useState<Segment>("week");
   const [heatFilter, setHeatFilter] = useState<number | null>(null); // null = all
   const [trackedKeywords, setTrackedKeywords] = useState<string[]>([]);
-  const [intentHistory, setIntentHistory] = useState<IntentMonthData[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(true);
   const [visibleIntents, setVisibleIntents] = useState<Set<string>>(new Set(["hot", "warm", "medium", "cool", "cold", "untracked"]));
   const [intentFrom, setIntentFrom] = useState("2025-01");
   const [intentTo, setIntentTo] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   });
-
-  // Fetch intent history (monthly term snapshots)
-  useEffect(() => {
-    setHistoryLoading(true);
-    fetch("/api/youtube-analytics/search-traffic/history")
-      .then((res) => res.json())
-      .then((json: { months: HistoryMonth[] }) => {
-        if (json.months) {
-          const data = json.months.map((m) => {
-            const buckets = { hot: 0, warm: 0, medium: 0, cool: 0, cold: 0, untracked: 0 };
-            for (const t of m.terms) {
-              const heat = getHeatLevel(t.term);
-              if (heat >= 5) buckets.hot += t.views;
-              else if (heat >= 4) buckets.warm += t.views;
-              else if (heat >= 3) buckets.medium += t.views;
-              else if (heat >= 2) buckets.cool += t.views;
-              else if (heat >= 1) buckets.cold += t.views;
-              else buckets.untracked += t.views;
-            }
-            return { period: m.period, ...buckets };
-          });
-          setIntentHistory(data);
-        }
-      })
-      .catch((err) => console.error("Intent history fetch failed:", err))
-      .finally(() => setHistoryLoading(false));
-  }, []);
 
   // Fetch tracked keywords for "not tracked" badges
   useEffect(() => {
@@ -363,6 +335,21 @@ export default function SearchPage() {
 
   const { daily, videos, summary } = data;
   const totalSearchViews = videos.reduce((s, v) => s + v.views, 0);
+
+  // Compute intent history from embedded data (no separate request)
+  const intentHistory: IntentMonthData[] = (data.intentHistory || []).map((m) => {
+    const buckets = { hot: 0, warm: 0, medium: 0, cool: 0, cold: 0, untracked: 0 };
+    for (const t of m.terms) {
+      const heat = getHeatLevel(t.term);
+      if (heat >= 5) buckets.hot += t.views;
+      else if (heat >= 4) buckets.warm += t.views;
+      else if (heat >= 3) buckets.medium += t.views;
+      else if (heat >= 2) buckets.cool += t.views;
+      else if (heat >= 1) buckets.cold += t.views;
+      else buckets.untracked += t.views;
+    }
+    return { period: m.period, ...buckets };
+  });
 
   // Categorize search terms by heat level
   const termsWithHeat = videos.map((t) => ({
@@ -599,47 +586,54 @@ export default function SearchPage() {
                 </button>
               );
             })}
-            {historyLoading && (
-              <span className="text-[11px] text-muted-foreground animate-pulse ml-2">Loading...</span>
-            )}
           </div>
         </div>
         {/* Date Range Filter */}
         <div className="flex items-center gap-3 mb-4">
-          <div className="flex items-center gap-2">
-            <label className="text-[11px] text-muted-foreground font-medium">From</label>
-            <input
-              type="month"
-              value={intentFrom}
-              onChange={(e) => setIntentFrom(e.target.value)}
-              className="px-2 py-1 rounded-md border border-border/60 bg-muted text-xs font-medium text-foreground"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="text-[11px] text-muted-foreground font-medium">To</label>
-            <input
-              type="month"
-              value={intentTo}
-              onChange={(e) => setIntentTo(e.target.value)}
-              className="px-2 py-1 rounded-md border border-border/60 bg-muted text-xs font-medium text-foreground"
-            />
-          </div>
+          {(() => {
+            const months: string[] = [];
+            const now = new Date();
+            let y = 2025, m = 1;
+            while (y < now.getFullYear() || (y === now.getFullYear() && m <= now.getMonth() + 1)) {
+              months.push(`${y}-${String(m).padStart(2, "0")}`);
+              m++;
+              if (m > 12) { m = 1; y++; }
+            }
+            const formatMonth = (val: string) => {
+              const d = new Date(val + "-01T00:00:00");
+              return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+            };
+            return (
+              <>
+                <div className="flex items-center gap-2">
+                  <label className="text-[11px] text-muted-foreground font-medium">From</label>
+                  <select
+                    value={intentFrom}
+                    onChange={(e) => setIntentFrom(e.target.value)}
+                    className="px-2 py-1 rounded-md border border-border/60 bg-muted text-xs font-medium text-foreground cursor-pointer"
+                  >
+                    {months.map((m) => (
+                      <option key={m} value={m}>{formatMonth(m)}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-[11px] text-muted-foreground font-medium">To</label>
+                  <select
+                    value={intentTo}
+                    onChange={(e) => setIntentTo(e.target.value)}
+                    className="px-2 py-1 rounded-md border border-border/60 bg-muted text-xs font-medium text-foreground cursor-pointer"
+                  >
+                    {months.map((m) => (
+                      <option key={m} value={m}>{formatMonth(m)}</option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            );
+          })()}
         </div>
-        {historyLoading ? (
-          <div className="h-72 flex items-end justify-around gap-2 px-4 pb-4">
-            {[65, 40, 55, 70, 45, 80, 50, 60, 75, 85, 55, 90, 48, 72].map((h, i) => (
-              <div
-                key={i}
-                className="flex-1 rounded-t-sm animate-pulse"
-                style={{
-                  height: `${h}%`,
-                  background: `linear-gradient(to top, var(--color-muted) 0%, transparent 100%)`,
-                  animationDelay: `${i * 100}ms`,
-                }}
-              />
-            ))}
-          </div>
-        ) : (() => {
+        {(() => {
           const filtered = intentHistory.filter((d) => d.period >= intentFrom && d.period <= intentTo);
           return filtered.length > 0 ? (
             <div className="h-72">

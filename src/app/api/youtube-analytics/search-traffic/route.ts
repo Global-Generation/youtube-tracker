@@ -11,6 +11,19 @@ function getCurrentPeriod(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
+function getAllMonthsFrom(from: string, to: string): string[] {
+  const months: string[] = [];
+  const [fromY, fromM] = from.split("-").map(Number);
+  const [toY, toM] = to.split("-").map(Number);
+  let y = fromY, m = fromM;
+  while (y < toY || (y === toY && m <= toM)) {
+    months.push(`${y}-${String(m).padStart(2, "0")}`);
+    m++;
+    if (m > 12) { m = 1; y++; }
+  }
+  return months;
+}
+
 export async function GET(request: Request) {
   const connected = await isYouTubeConnected();
   if (!connected) {
@@ -124,6 +137,20 @@ export async function GET(request: Request) {
     const prev30 = daily.slice(-60, -30);
     const prevViews30d = prev30.reduce((s, d) => s + d.views, 0);
 
+    // Intent history from SearchTermSnapshot cache (embed to avoid second request)
+    const currentPeriod = getCurrentPeriod();
+    const allMonths = getAllMonthsFrom("2025-01", currentPeriod);
+    const allSnapshots = await prisma.searchTermSnapshot.findMany({
+      where: { period: { in: allMonths } },
+      orderBy: [{ period: "asc" }, { views: "desc" }],
+    });
+    const intentHistory = allMonths.map((p) => ({
+      period: p,
+      terms: allSnapshots
+        .filter((s) => s.period === p)
+        .map((s) => ({ term: s.term, views: s.views })),
+    }));
+
     return NextResponse.json({
       connected: true,
       daily,
@@ -136,6 +163,7 @@ export async function GET(request: Request) {
         prevViews30d,
         totalViews,
       },
+      intentHistory,
     });
   } catch (err) {
     console.error("YouTube Analytics error:", err);

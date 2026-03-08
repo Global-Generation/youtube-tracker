@@ -239,7 +239,6 @@ export default function SearchPage() {
   const [heatFilter, setHeatFilter] = useState<number | null>(null); // null = all
   const [trackedKeywords, setTrackedKeywords] = useState<string[]>([]);
   const [visibleIntents, setVisibleIntents] = useState<Set<string>>(new Set(["hot", "warm", "medium", "cool", "cold", "untracked"]));
-  const [backfilling, setBackfilling] = useState(false);
 
   // Fetch tracked keywords for "not tracked" badges
   useEffect(() => {
@@ -249,6 +248,11 @@ export default function SearchPage() {
         setTrackedKeywords(kws.map((k) => k.text.toLowerCase()));
       })
       .catch(() => {});
+  }, []);
+
+  // Auto-backfill missing months on page load (fire-and-forget)
+  useEffect(() => {
+    fetch("/api/youtube-analytics/search-traffic/history?backfill=true").catch(() => {});
   }, []);
 
   const fetchData = useCallback(async () => {
@@ -596,7 +600,6 @@ export default function SearchPage() {
             byYear.get(year)!.push(d);
           }
           const years = Array.from(byYear.keys()).sort();
-          const hasEmptyMonths = intentHistory.some((d) => d.hot + d.warm + d.medium + d.cool + d.cold + d.untracked === 0);
 
           const heatColors: Record<number, string> = {
             5: "bg-red-500", 4: "bg-orange-500", 3: "bg-yellow-500",
@@ -616,15 +619,14 @@ export default function SearchPage() {
                 const chartData = monthNames.map((name, i) => {
                   const period = `${year}-${String(i + 1).padStart(2, "0")}`;
                   const found = yearData.find((d) => d.period === period);
+                  const h = found?.hot || 0, w = found?.warm || 0, med = found?.medium || 0;
+                  const co = found?.cool || 0, cl = found?.cold || 0, un = found?.untracked || 0;
                   return {
                     month: name,
-                    hot: found?.hot || 0,
-                    warm: found?.warm || 0,
-                    medium: found?.medium || 0,
-                    cool: found?.cool || 0,
-                    cold: found?.cold || 0,
-                    untracked: found?.untracked || 0,
-                    total: found ? (found.hot + found.warm + found.medium + found.cool + found.cold + found.untracked) : 0,
+                    hot: h, warm: w, medium: med, cool: co, cold: cl, untracked: un,
+                    visibleTotal: (visibleIntents.has("hot") ? h : 0) + (visibleIntents.has("warm") ? w : 0) +
+                      (visibleIntents.has("medium") ? med : 0) + (visibleIntents.has("cool") ? co : 0) +
+                      (visibleIntents.has("cold") ? cl : 0) + (visibleIntents.has("untracked") ? un : 0),
                   };
                 });
 
@@ -657,7 +659,7 @@ export default function SearchPage() {
                     </div>
                     <div className="h-56">
                       <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={chartData}>
+                        <BarChart data={chartData} margin={{ left: 10, top: 15 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.3} vertical={false} />
                           <XAxis
                             dataKey="month"
@@ -702,7 +704,7 @@ export default function SearchPage() {
                             const isTop = key === topVisibleIntent;
                             return (
                               <Bar key={key} dataKey={key} stackId="1" fill={HEAT_LABELS[heat].chartColor} radius={isTop ? [3, 3, 0, 0] : undefined}>
-                                {isTop && <LabelList dataKey="total" position="top" formatter={(v) => Number(v || 0) > 0 ? formatNum(Number(v)) : ""} style={{ fontSize: 10, fill: "var(--color-muted-foreground)" }} />}
+                                {isTop && <LabelList dataKey="visibleTotal" position="top" formatter={(v) => Number(v || 0) > 0 ? formatNum(Number(v)) : ""} style={{ fontSize: 10, fill: "var(--color-muted-foreground)" }} />}
                               </Bar>
                             );
                           })}
@@ -747,30 +749,6 @@ export default function SearchPage() {
                 );
               })}
 
-              {/* Backfill button */}
-              {hasEmptyMonths && (
-                <div className="flex items-center gap-3 pt-2 border-t border-border/40">
-                  <button
-                    onClick={async () => {
-                      setBackfilling(true);
-                      try {
-                        await fetch("/api/youtube-analytics/search-traffic/history?backfill=true");
-                        // Auto-refresh after 60s to pick up data
-                        setTimeout(() => fetchData(), 60_000);
-                      } catch {}
-                    }}
-                    disabled={backfilling}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-muted text-muted-foreground hover:text-foreground border border-border/40 transition-colors disabled:opacity-50"
-                  >
-                    {backfilling ? "Backfilling..." : "Fetch missing months"}
-                  </button>
-                  {backfilling && (
-                    <span className="text-[11px] text-muted-foreground animate-pulse">
-                      Fetching data for empty months. Page will refresh automatically.
-                    </span>
-                  )}
-                </div>
-              )}
             </div>
           );
         })()}

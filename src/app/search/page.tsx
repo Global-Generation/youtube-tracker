@@ -10,8 +10,8 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
+  LabelList,
 } from "recharts";
 import { getHeatLevel, HEAT_LABELS } from "@/lib/heat-map";
 
@@ -239,11 +239,7 @@ export default function SearchPage() {
   const [heatFilter, setHeatFilter] = useState<number | null>(null); // null = all
   const [trackedKeywords, setTrackedKeywords] = useState<string[]>([]);
   const [visibleIntents, setVisibleIntents] = useState<Set<string>>(new Set(["hot", "warm", "medium", "cool", "cold", "untracked"]));
-  const [intentFrom, setIntentFrom] = useState("2025-01");
-  const [intentTo, setIntentTo] = useState(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  });
+  const [backfilling, setBackfilling] = useState(false);
 
   // Fetch tracked keywords for "not tracked" badges
   useEffect(() => {
@@ -500,7 +496,9 @@ export default function SearchPage() {
                   labelFormatter={(l) => formatSegmentLabel(String(l), segment)}
                   formatter={(value) => [Number(value).toLocaleString(), "Views"]}
                 />
-                <Bar dataKey="views" fill="var(--color-primary)" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="views" fill="var(--color-primary)" radius={[4, 4, 0, 0]}>
+                  <LabelList dataKey="views" position="top" formatter={(v) => formatNum(Number(v || 0))} style={{ fontSize: 10, fill: "var(--color-muted-foreground)" }} />
+                </Bar>
               </BarChart>
             ) : (
               <AreaChart data={chartData}>
@@ -550,12 +548,12 @@ export default function SearchPage() {
         </div>
       </div>
 
-      {/* Intent Dynamics Chart */}
+      {/* Intent Dynamics — Year over Year */}
       <div className="bg-card rounded-xl p-5 border border-border/60">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           <div>
             <h2 className="text-sm font-semibold">Intent Dynamics</h2>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Monthly search views by intent level</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Year-over-year search views by intent level</p>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
             {([
@@ -588,164 +586,195 @@ export default function SearchPage() {
             })}
           </div>
         </div>
-        {/* Date Range Filter */}
-        <div className="flex items-center gap-3 mb-4">
-          {(() => {
-            const months: string[] = [];
-            const now = new Date();
-            let y = 2025, m = 1;
-            while (y < now.getFullYear() || (y === now.getFullYear() && m <= now.getMonth() + 1)) {
-              months.push(`${y}-${String(m).padStart(2, "0")}`);
-              m++;
-              if (m > 12) { m = 1; y++; }
-            }
-            const formatMonth = (val: string) => {
-              const d = new Date(val + "-01T00:00:00");
-              return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
-            };
-            return (
-              <>
-                <div className="flex items-center gap-2">
-                  <label className="text-[11px] text-muted-foreground font-medium">From</label>
-                  <select
-                    value={intentFrom}
-                    onChange={(e) => setIntentFrom(e.target.value)}
-                    className="px-2 py-1 rounded-md border border-border/60 bg-muted text-xs font-medium text-foreground cursor-pointer"
-                  >
-                    {months.map((m) => (
-                      <option key={m} value={m}>{formatMonth(m)}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex items-center gap-2">
-                  <label className="text-[11px] text-muted-foreground font-medium">To</label>
-                  <select
-                    value={intentTo}
-                    onChange={(e) => setIntentTo(e.target.value)}
-                    className="px-2 py-1 rounded-md border border-border/60 bg-muted text-xs font-medium text-foreground cursor-pointer"
-                  >
-                    {months.map((m) => (
-                      <option key={m} value={m}>{formatMonth(m)}</option>
-                    ))}
-                  </select>
-                </div>
-              </>
-            );
-          })()}
-        </div>
+
         {(() => {
-          const filtered = intentHistory.filter((d) => d.period >= intentFrom && d.period <= intentTo);
-          return filtered.length > 0 ? (
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={filtered}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.3} vertical={false} />
-                  <XAxis
-                    dataKey="period"
-                    tickFormatter={(p: string) => {
-                      const d = new Date(p + "-01T00:00:00");
-                      return d.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+          // Group intent history by year
+          const byYear = new Map<number, IntentMonthData[]>();
+          for (const d of intentHistory) {
+            const year = parseInt(d.period.split("-")[0]);
+            if (!byYear.has(year)) byYear.set(year, []);
+            byYear.get(year)!.push(d);
+          }
+          const years = Array.from(byYear.keys()).sort();
+          const hasEmptyMonths = intentHistory.some((d) => d.hot + d.warm + d.medium + d.cool + d.cold + d.untracked === 0);
+
+          const heatColors: Record<number, string> = {
+            5: "bg-red-500", 4: "bg-orange-500", 3: "bg-yellow-500",
+            2: "bg-blue-500", 1: "bg-slate-500", 0: "bg-muted-foreground/30",
+          };
+
+          // Find topmost visible intent key for LabelList
+          const intentOrder = ["hot", "warm", "medium", "cool", "cold", "untracked"] as const;
+          const topVisibleIntent = intentOrder.find((k) => visibleIntents.has(k));
+
+          return (
+            <div className="space-y-6">
+              {years.map((year) => {
+                const yearData = byYear.get(year)!;
+                // Pad to 12 months for consistent X-axis
+                const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                const chartData = monthNames.map((name, i) => {
+                  const period = `${year}-${String(i + 1).padStart(2, "0")}`;
+                  const found = yearData.find((d) => d.period === period);
+                  return {
+                    month: name,
+                    hot: found?.hot || 0,
+                    warm: found?.warm || 0,
+                    medium: found?.medium || 0,
+                    cool: found?.cool || 0,
+                    cold: found?.cold || 0,
+                    untracked: found?.untracked || 0,
+                    total: found ? (found.hot + found.warm + found.medium + found.cool + found.cold + found.untracked) : 0,
+                  };
+                });
+
+                // Intent summary for this year
+                const yearTotals = { hot: 0, warm: 0, medium: 0, cool: 0, cold: 0, untracked: 0 };
+                for (const d of yearData) {
+                  yearTotals.hot += d.hot;
+                  yearTotals.warm += d.warm;
+                  yearTotals.medium += d.medium;
+                  yearTotals.cool += d.cool;
+                  yearTotals.cold += d.cold;
+                  yearTotals.untracked += d.untracked;
+                }
+                const yearTotal = yearTotals.hot + yearTotals.warm + yearTotals.medium + yearTotals.cool + yearTotals.cold + yearTotals.untracked;
+
+                const yearHeatSummary = [
+                  { heat: 5, views: yearTotals.hot },
+                  { heat: 4, views: yearTotals.warm },
+                  { heat: 3, views: yearTotals.medium },
+                  { heat: 2, views: yearTotals.cool },
+                  { heat: 1, views: yearTotals.cold },
+                  { heat: 0, views: yearTotals.untracked },
+                ].filter((g) => g.views > 0);
+
+                return (
+                  <div key={year}>
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-sm font-semibold text-foreground">{year}</h3>
+                      <span className="text-xs text-muted-foreground">{formatNum(yearTotal)} total views</span>
+                    </div>
+                    <div className="h-56">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={chartData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.3} vertical={false} />
+                          <XAxis
+                            dataKey="month"
+                            tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+                            tickLine={false}
+                            axisLine={false}
+                            interval={0}
+                          />
+                          <YAxis
+                            tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+                            tickLine={false}
+                            axisLine={false}
+                            width={45}
+                            tickFormatter={formatNum}
+                          />
+                          <Tooltip
+                            contentStyle={{
+                              background: "var(--color-card)",
+                              border: "1px solid var(--color-border)",
+                              borderRadius: "8px",
+                              fontSize: "12px",
+                            }}
+                            labelFormatter={(m) => `${m} ${year}`}
+                            formatter={(value, name) => {
+                              const labels: Record<string, string> = {
+                                hot: "Hot", warm: "Warm", medium: "Medium",
+                                cool: "Cool", cold: "Cold", untracked: "Untracked",
+                              };
+                              return [Number(value).toLocaleString(), labels[String(name)] || String(name)];
+                            }}
+                          />
+                          {/* Render bars bottom-to-top; topmost visible gets LabelList + radius */}
+                          {([
+                            { key: "untracked", heat: 0 },
+                            { key: "cold", heat: 1 },
+                            { key: "cool", heat: 2 },
+                            { key: "medium", heat: 3 },
+                            { key: "warm", heat: 4 },
+                            { key: "hot", heat: 5 },
+                          ] as const).map(({ key, heat }) => {
+                            if (!visibleIntents.has(key)) return null;
+                            const isTop = key === topVisibleIntent;
+                            return (
+                              <Bar key={key} dataKey={key} stackId="1" fill={HEAT_LABELS[heat].chartColor} radius={isTop ? [3, 3, 0, 0] : undefined}>
+                                {isTop && <LabelList dataKey="total" position="top" formatter={(v) => Number(v || 0) > 0 ? formatNum(Number(v)) : ""} style={{ fontSize: 10, fill: "var(--color-muted-foreground)" }} />}
+                              </Bar>
+                            );
+                          })}
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                    {/* Traffic by Intent bar for this year */}
+                    {yearTotal > 0 && (
+                      <div className="mt-2">
+                        <div className="flex rounded-lg overflow-hidden h-6">
+                          {yearHeatSummary.map(({ heat, views }) => {
+                            const pct = yearTotal > 0 ? (views / yearTotal) * 100 : 0;
+                            if (pct < 1) return null;
+                            return (
+                              <div
+                                key={heat}
+                                className={`${heatColors[heat]} flex items-center justify-center text-[9px] font-semibold text-white min-w-[24px] transition-all`}
+                                style={{ width: `${pct}%` }}
+                                title={`${HEAT_LABELS[heat].label}: ${formatNum(views)} (${Math.round(pct)}%)`}
+                              >
+                                {pct >= 8 && (
+                                  <span className="truncate px-1">
+                                    {HEAT_LABELS[heat].label} {Math.round(pct)}%
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5">
+                          {yearHeatSummary.map(({ heat, views }) => (
+                            <div key={heat} className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                              <span className={`w-1.5 h-1.5 rounded-full ${heatColors[heat]}`} />
+                              <span>{HEAT_LABELS[heat].label}</span>
+                              <span className="font-medium text-foreground">{formatNum(views)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Backfill button */}
+              {hasEmptyMonths && (
+                <div className="flex items-center gap-3 pt-2 border-t border-border/40">
+                  <button
+                    onClick={async () => {
+                      setBackfilling(true);
+                      try {
+                        await fetch("/api/youtube-analytics/search-traffic/history?backfill=true");
+                        // Auto-refresh after 60s to pick up data
+                        setTimeout(() => fetchData(), 60_000);
+                      } catch {}
                     }}
-                    tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
-                    tickLine={false}
-                    axisLine={false}
-                    interval={0}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
-                    tickLine={false}
-                    axisLine={false}
-                    width={45}
-                    tickFormatter={formatNum}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      background: "var(--color-card)",
-                      border: "1px solid var(--color-border)",
-                      borderRadius: "8px",
-                      fontSize: "12px",
-                    }}
-                    labelFormatter={(p) => {
-                      const d = new Date(String(p) + "-01T00:00:00");
-                      return d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-                    }}
-                    formatter={(value, name) => {
-                      const labels: Record<string, string> = {
-                        hot: "Hot", warm: "Warm", medium: "Medium",
-                        cool: "Cool", cold: "Cold", untracked: "Untracked",
-                      };
-                      return [Number(value).toLocaleString(), labels[String(name)] || String(name)];
-                    }}
-                  />
-                  {visibleIntents.has("untracked") && <Bar dataKey="untracked" stackId="1" fill={HEAT_LABELS[0].chartColor} />}
-                  {visibleIntents.has("cold") && <Bar dataKey="cold" stackId="1" fill={HEAT_LABELS[1].chartColor} />}
-                  {visibleIntents.has("cool") && <Bar dataKey="cool" stackId="1" fill={HEAT_LABELS[2].chartColor} />}
-                  {visibleIntents.has("medium") && <Bar dataKey="medium" stackId="1" fill={HEAT_LABELS[3].chartColor} />}
-                  {visibleIntents.has("warm") && <Bar dataKey="warm" stackId="1" fill={HEAT_LABELS[4].chartColor} />}
-                  {visibleIntents.has("hot") && <Bar dataKey="hot" stackId="1" fill={HEAT_LABELS[5].chartColor} radius={[3, 3, 0, 0]} />}
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="h-32 flex items-center justify-center text-sm text-muted-foreground">
-              No history data available for this range
+                    disabled={backfilling}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-muted text-muted-foreground hover:text-foreground border border-border/40 transition-colors disabled:opacity-50"
+                  >
+                    {backfilling ? "Backfilling..." : "Fetch missing months"}
+                  </button>
+                  {backfilling && (
+                    <span className="text-[11px] text-muted-foreground animate-pulse">
+                      Fetching data for empty months. Page will refresh automatically.
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           );
         })()}
       </div>
-
-      {/* Heat Breakdown Bar */}
-      {heatSummary.length > 0 && (
-        <div className="bg-card rounded-xl p-4 border border-border/60">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-sm font-semibold">Traffic by Intent</h2>
-            <span className="text-xs text-muted-foreground">{formatNum(totalSearchViews)} total views</span>
-          </div>
-          <div className="flex rounded-lg overflow-hidden h-8">
-            {heatSummary.map(({ heat, views }) => {
-              const pct = totalSearchViews > 0 ? (views / totalSearchViews) * 100 : 0;
-              if (pct < 1) return null;
-              const colors: Record<number, string> = {
-                5: "bg-red-500",
-                4: "bg-orange-500",
-                3: "bg-yellow-500",
-                2: "bg-blue-500",
-                1: "bg-slate-500",
-                0: "bg-muted-foreground/30",
-              };
-              return (
-                <div
-                  key={heat}
-                  className={`${colors[heat]} flex items-center justify-center text-[10px] font-semibold text-white min-w-[30px] transition-all`}
-                  style={{ width: `${pct}%` }}
-                  title={`${HEAT_LABELS[heat].label}: ${formatNum(views)} (${Math.round(pct)}%)`}
-                >
-                  {pct >= 8 && (
-                    <span className="truncate px-1">
-                      {HEAT_LABELS[heat].label} {Math.round(pct)}%
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
-            {heatSummary.map(({ heat, views }) => {
-              const colors: Record<number, string> = {
-                5: "bg-red-500", 4: "bg-orange-500", 3: "bg-yellow-500",
-                2: "bg-blue-500", 1: "bg-slate-500", 0: "bg-muted-foreground/30",
-              };
-              return (
-                <div key={heat} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                  <span className={`w-2 h-2 rounded-full ${colors[heat]}`} />
-                  <span>{HEAT_LABELS[heat].label}</span>
-                  <span className="font-medium text-foreground">{formatNum(views)}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* Heat Level Summary */}
       <div className="flex flex-wrap gap-2">

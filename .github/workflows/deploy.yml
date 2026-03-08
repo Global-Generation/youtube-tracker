@@ -16,4 +16,4 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            sudo -u deploy bash -c "cd /home/deploy/youtube-tracker && git pull origin main && docker compose build && docker compose up -d"
+            sudo -u deploy bash -c "cd /home/deploy/youtube-tracker && git pull origin main && docker compose build && docker compose up -d --force-recreate --remove-orphans"

@@ -401,28 +401,11 @@ export default function SearchPage() {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Search Traffic</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            YouTube Search views — more search = more business
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {periods.map((p) => (
-            <button
-              key={p.value}
-              onClick={() => setPeriod(p.value)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                period === p.value
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
+      <div>
+        <h1 className="text-2xl font-semibold">Search Traffic</h1>
+        <p className="text-muted-foreground text-sm mt-1">
+          YouTube Search views — more search = more business
+        </p>
       </div>
 
       {/* Scorecards */}
@@ -449,22 +432,40 @@ export default function SearchPage() {
 
       {/* Chart */}
       <div className="bg-card rounded-xl p-5 border border-border/60">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           <h2 className="text-sm font-semibold">Search Views</h2>
-          <div className="flex items-center gap-1">
-            {segments.map((s) => (
-              <button
-                key={s.value}
-                onClick={() => setSegment(s.value)}
-                className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
-                  segment === s.value
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {s.label}
-              </button>
-            ))}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1">
+              {periods.map((p) => (
+                <button
+                  key={p.value}
+                  onClick={() => setPeriod(p.value)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    period === p.value
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <div className="w-px h-5 bg-border/60" />
+            <div className="flex items-center gap-1">
+              {segments.map((s) => (
+                <button
+                  key={s.value}
+                  onClick={() => setSegment(s.value)}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                    segment === s.value
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
         <div className="h-64">

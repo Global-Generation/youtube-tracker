@@ -103,6 +103,10 @@ export async function GET(request: Request) {
       }
     }
 
+    // Only keep top 500 terms by views to avoid UI overload
+    videos.sort((a, b) => b.views - a.views);
+    videos = videos.slice(0, 500);
+
     // Cache the freshly fetched terms
     if (fetchTerms && videos.length > 0) {
       await prisma.searchTermSnapshot.deleteMany({ where: { period } });

@@ -56,13 +56,13 @@ export async function GET(request: Request) {
       ? startDate
       : termsStartObj.toISOString().split("T")[0];
 
-    // Check if we have cached terms for the current period
-    const period = getCurrentPeriod();
+    // Check if we have cached terms (stored under "live" key, separate from per-month history)
+    const cacheKey = "live";
     let videos: { videoId: string; views: number }[] = [];
 
     if (!refresh) {
       const cached = await prisma.searchTermSnapshot.findMany({
-        where: { period },
+        where: { period: cacheKey },
         orderBy: { views: "desc" },
       });
 
@@ -103,16 +103,12 @@ export async function GET(request: Request) {
       }
     }
 
-    // Only keep top 500 terms by views to avoid UI overload
-    videos.sort((a, b) => b.views - a.views);
-    videos = videos.slice(0, 500);
-
-    // Cache the freshly fetched terms
+    // Cache the freshly fetched terms (under "live" key, not current month)
     if (fetchTerms && videos.length > 0) {
-      await prisma.searchTermSnapshot.deleteMany({ where: { period } });
+      await prisma.searchTermSnapshot.deleteMany({ where: { period: cacheKey } });
       await prisma.searchTermSnapshot.createMany({
         data: videos.map((v) => ({
-          period,
+          period: cacheKey,
           term: v.videoId,
           views: v.views,
           fetchedAt: new Date(),

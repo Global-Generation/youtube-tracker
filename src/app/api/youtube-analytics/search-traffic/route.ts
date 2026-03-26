@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import {
   isYouTubeConnected,
   getSearchTrafficByDay,
-  getAllSearchTerms,
+  getSearchTrafficByVideo,
 } from "@/lib/youtube-analytics";
 
 function getCurrentPeriod(): string {
@@ -24,6 +24,10 @@ function getAllMonthsFrom(from: string, to: string): string[] {
   return months;
 }
 
+function dateStr(d: Date): string {
+  return d.toISOString().split("T")[0];
+}
+
 export async function GET(request: Request) {
   const connected = await isYouTubeConnected();
   if (!connected) {
@@ -37,38 +41,51 @@ export async function GET(request: Request) {
   const daysParam = searchParams.get("days") || "90";
   const refresh = searchParams.get("refresh") === "true";
 
-  const endDate = new Date().toISOString().split("T")[0];
+  const now = new Date();
+  const endDate = dateStr(now);
   let startDate: string;
   if (daysParam === "all") {
-    startDate = "2020-01-01"; // far enough back for all data
+    startDate = "2020-01-01";
   } else {
     const days = parseInt(daysParam);
     const startDateObj = new Date();
     startDateObj.setDate(startDateObj.getDate() - days);
-    startDate = startDateObj.toISOString().split("T")[0];
+    startDate = dateStr(startDateObj);
   }
 
   try {
+    const errors: string[] = [];
+    let stale = false;
+
     // Search terms query fails on ranges > ~1 year, cap it
     const termsStartObj = new Date();
     termsStartObj.setDate(termsStartObj.getDate() - 365);
-    const termsStartDate = startDate > termsStartObj.toISOString().split("T")[0]
+    const termsStartDate = startDate > dateStr(termsStartObj)
       ? startDate
-      : termsStartObj.toISOString().split("T")[0];
+      : dateStr(termsStartObj);
 
-    // Check if we have cached terms (stored under "live" key, separate from per-month history)
+    // --- DAILY DATA ---
+    let daily: { date: string; views: number; estimatedMinutesWatched: number }[] = [];
+    try {
+      daily = await getSearchTrafficByDay(startDate, endDate);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      console.error("Daily query failed:", err);
+      errors.push(`Daily data: ${msg}`);
+    }
+
+    // --- SEARCH TERMS (fast: single API call instead of 200+) ---
     const cacheKey = "live";
     let videos: { videoId: string; views: number }[] = [];
 
+    // Try cache first
     if (!refresh) {
       const cached = await prisma.searchTermSnapshot.findMany({
         where: { period: cacheKey },
         orderBy: { views: "desc" },
       });
 
-      // Use cache if fresh (< 6 hours old) AND has more than 25 terms
-      // (old cache from before per-video strategy had exactly 25 terms)
-      if (cached.length > 25) {
+      if (cached.length > 0) {
         const oldestFetch = cached.reduce(
           (min, s) => (s.fetchedAt < min ? s.fetchedAt : min),
           cached[0].fetchedAt
@@ -82,29 +99,51 @@ export async function GET(request: Request) {
       }
     }
 
-    // Fetch fresh data if no cache
+    // Fetch fresh if no valid cache
     const fetchTerms = videos.length === 0;
-
-    // Run daily query FIRST — independent from terms query
-    // This prevents rate limit from per-video terms queries killing daily data
-    let daily: { date: string; views: number; estimatedMinutesWatched: number }[] = [];
-    try {
-      daily = await getSearchTrafficByDay(startDate, endDate);
-    } catch (err) {
-      console.error("Daily query failed:", err);
-    }
-
-    // Then fetch terms (200+ API calls) separately
     if (fetchTerms) {
       try {
-        videos = await getAllSearchTerms(termsStartDate, endDate);
+        // Single API call — gets top 50 search terms (fast, no per-video loop)
+        videos = await getSearchTrafficByVideo(termsStartDate, endDate, 50);
       } catch (err) {
+        const msg = err instanceof Error ? err.message : "Unknown error";
         console.error("Search terms query failed:", err);
+        errors.push(`Search terms: ${msg}`);
       }
     }
 
-    // Cache the freshly fetched terms (under "live" key, not current month)
-    if (fetchTerms && videos.length > 0) {
+    // Fallback: if fresh fetch failed, use stale "live" cache (any age)
+    if (videos.length === 0 && fetchTerms) {
+      const staleCached = await prisma.searchTermSnapshot.findMany({
+        where: { period: cacheKey },
+        orderBy: { views: "desc" },
+      });
+      if (staleCached.length > 0) {
+        videos = staleCached.map((s) => ({ videoId: s.term, views: s.views }));
+        stale = true;
+      }
+    }
+
+    // Fallback 2: if "live" cache is also empty, use latest monthly snapshot
+    if (videos.length === 0) {
+      const latestSnapshot = await prisma.searchTermSnapshot.findFirst({
+        where: { period: { not: cacheKey } },
+        orderBy: { period: "desc" },
+      });
+      if (latestSnapshot) {
+        const monthlyData = await prisma.searchTermSnapshot.findMany({
+          where: { period: latestSnapshot.period },
+          orderBy: { views: "desc" },
+        });
+        if (monthlyData.length > 0) {
+          videos = monthlyData.map((s) => ({ videoId: s.term, views: s.views }));
+          stale = true;
+        }
+      }
+    }
+
+    // Cache freshly fetched terms
+    if (fetchTerms && videos.length > 0 && !stale) {
       await prisma.searchTermSnapshot.deleteMany({ where: { period: cacheKey } });
       await prisma.searchTermSnapshot.createMany({
         data: videos.map((v) => ({
@@ -116,28 +155,21 @@ export async function GET(request: Request) {
       });
     }
 
-    // Compute summary metrics
+    // --- SUMMARY METRICS (date-based filtering, not array slicing) ---
     const totalViews = daily.reduce((s, d) => s + d.views, 0);
-    const today = daily.find((d) => d.date === endDate);
-    const todayViews = today?.views ?? 0;
+    const todayViews = daily.find((d) => d.date === endDate)?.views ?? 0;
 
-    // Last 7 days
-    const last7 = daily.slice(-7);
-    const views7d = last7.reduce((s, d) => s + d.views, 0);
+    const d7 = dateStr(new Date(now.getTime() - 7 * 86400000));
+    const d14 = dateStr(new Date(now.getTime() - 14 * 86400000));
+    const d30 = dateStr(new Date(now.getTime() - 30 * 86400000));
+    const d60 = dateStr(new Date(now.getTime() - 60 * 86400000));
 
-    // Previous 7 days (for delta)
-    const prev7 = daily.slice(-14, -7);
-    const prevViews7d = prev7.reduce((s, d) => s + d.views, 0);
+    const views7d = daily.filter((d) => d.date >= d7).reduce((s, d) => s + d.views, 0);
+    const prevViews7d = daily.filter((d) => d.date >= d14 && d.date < d7).reduce((s, d) => s + d.views, 0);
+    const views30d = daily.filter((d) => d.date >= d30).reduce((s, d) => s + d.views, 0);
+    const prevViews30d = daily.filter((d) => d.date >= d60 && d.date < d30).reduce((s, d) => s + d.views, 0);
 
-    // Last 30 days
-    const last30 = daily.slice(-30);
-    const views30d = last30.reduce((s, d) => s + d.views, 0);
-
-    // Previous 30 days
-    const prev30 = daily.slice(-60, -30);
-    const prevViews30d = prev30.reduce((s, d) => s + d.views, 0);
-
-    // Intent history from SearchTermSnapshot cache (embed to avoid second request)
+    // Intent history from SearchTermSnapshot cache
     const currentPeriod = getCurrentPeriod();
     const allMonths = getAllMonthsFrom("2025-01", currentPeriod);
     const allSnapshots = await prisma.searchTermSnapshot.findMany({
@@ -164,6 +196,8 @@ export async function GET(request: Request) {
         totalViews,
       },
       intentHistory,
+      errors: errors.length > 0 ? errors : undefined,
+      stale: stale || undefined,
     });
   } catch (err) {
     console.error("YouTube Analytics error:", err);

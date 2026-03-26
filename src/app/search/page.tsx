@@ -41,6 +41,8 @@ interface SearchTrafficData {
   videos: SearchTermData[];
   summary: Summary;
   intentHistory?: HistoryMonth[];
+  errors?: string[];
+  stale?: boolean;
 }
 
 type Period = "30" | "90" | "180" | "365" | "all";
@@ -250,10 +252,13 @@ export default function SearchPage() {
       .catch(() => {});
   }, []);
 
-  // Auto-backfill missing months on page load (fire-and-forget)
+  // Backfill missing months — only once per session, not on every render
+  const [backfillDone, setBackfillDone] = useState(false);
   useEffect(() => {
+    if (backfillDone) return;
+    setBackfillDone(true);
     fetch("/api/youtube-analytics/search-traffic/history?backfill=true").catch(() => {});
-  }, []);
+  }, [backfillDone]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -407,6 +412,19 @@ export default function SearchPage() {
           YouTube Search views — more search = more business
         </p>
       </div>
+
+      {/* Error/stale warnings */}
+      {data.errors && data.errors.length > 0 && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3 text-sm text-yellow-800">
+          <span className="font-medium">Partial data:</span>{" "}
+          {data.errors.join("; ")}
+        </div>
+      )}
+      {data.stale && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm text-blue-800">
+          Showing cached data — live fetch failed. Data may be outdated.
+        </div>
+      )}
 
       {/* Scorecards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

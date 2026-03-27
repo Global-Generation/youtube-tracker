@@ -103,8 +103,8 @@ export async function GET(request: Request) {
     const fetchTerms = videos.length === 0;
     if (fetchTerms) {
       try {
-        // Single API call — gets top 50 search terms (fast, no per-video loop)
-        videos = await getSearchTrafficByVideo(termsStartDate, endDate, 50);
+        // Single API call — gets top 25 search terms (fast, no per-video loop)
+        videos = await getSearchTrafficByVideo(termsStartDate, endDate, 25);
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Unknown error";
         console.error("Search terms query failed:", err);

@@ -142,16 +142,25 @@ export async function GET(request: Request) {
       }
     }
 
-    // Cache freshly fetched terms
+    // Cache freshly fetched terms under "live" AND current month
     if (fetchTerms && videos.length > 0 && !stale) {
+      const currentMonth = getCurrentPeriod(); // e.g. "2026-03"
+      const cacheData = videos.map((v) => ({
+        term: v.videoId,
+        views: v.views,
+        fetchedAt: new Date(),
+      }));
+
+      // Save under "live" key
       await prisma.searchTermSnapshot.deleteMany({ where: { period: cacheKey } });
       await prisma.searchTermSnapshot.createMany({
-        data: videos.map((v) => ({
-          period: cacheKey,
-          term: v.videoId,
-          views: v.views,
-          fetchedAt: new Date(),
-        })),
+        data: cacheData.map((d) => ({ ...d, period: cacheKey })),
+      });
+
+      // Also update current month snapshot (so Intent Dynamics stays fresh)
+      await prisma.searchTermSnapshot.deleteMany({ where: { period: currentMonth } });
+      await prisma.searchTermSnapshot.createMany({
+        data: cacheData.map((d) => ({ ...d, period: currentMonth })),
       });
     }
 
